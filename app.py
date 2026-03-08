@@ -1,0 +1,491 @@
+# =============================================================================
+# HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
+# Versión para Streamlit Cloud
+# =============================================================================
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import pickle
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+import re
+import os
+import time
+
+# =============================================================================
+# CONFIGURACIÓN INICIAL
+# =============================================================================
+
+st.set_page_config(
+    page_title="Hotel Gran Bali - IA Limpieza",
+    page_icon="🏨",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# =============================================================================
+# CARGA DE MODELOS
+# =============================================================================
+
+@st.cache_resource
+def cargar_modelos():
+    """Carga todos los modelos necesarios"""
+    modelos = {}
+    archivos_modelos = {
+        'ann': 'ann.pkl',
+        'xgboost': 'xgboost.pkl',
+        'kmeans': 'kmeans.pkl',
+        'nlp': 'nlp.pkl'
+    }
+    
+    # Verificar que los archivos existen
+    for nombre, archivo in archivos_modelos.items():
+        if os.path.exists(archivo):
+            try:
+                with open(archivo, 'rb') as f:
+                    modelos[nombre] = pickle.load(f)
+            except Exception as e:
+                st.warning(f"⚠️ No se pudo cargar {nombre}: {str(e)}")
+                modelos[nombre] = None
+        else:
+            st.warning(f"⚠️ Archivo no encontrado: {archivo}")
+            modelos[nombre] = None
+    
+    return modelos
+
+# Cargar modelos al inicio
+with st.spinner("Cargando modelos de IA..."):
+    modelos = cargar_modelos()
+
+# =============================================================================
+# INICIALIZACIÓN DEL ESTADO DE SESIÓN
+# =============================================================================
+
+if 'df_pms' not in st.session_state:
+    st.session_state.df_pms = None
+if 'incidencias' not in st.session_state:
+    st.session_state.incidencias = []
+if 'opiniones' not in st.session_state:
+    st.session_state.opiniones = []
+if 'camarera_actual' not in st.session_state:
+    st.session_state.camarera_actual = None
+if 'cronometro_activo' not in st.session_state:
+    st.session_state.cronometro_activo = False
+if 'tiempo_inicio' not in st.session_state:
+    st.session_state.tiempo_inicio = None
+if 'habitacion_actual' not in st.session_state:
+    st.session_state.habitacion_actual = None
+
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
+
+def limpiar_texto_opinion(texto):
+    """Limpia el texto de opiniones para el modelo NLP"""
+    if not isinstance(texto, str) or texto == "":
+        return ""
+    texto = texto.lower()
+    texto = re.sub(r'[^\w\s]', '', texto)
+    texto = re.sub(r'\d+', '', texto)
+    texto = re.sub(r'\s+', ' ', texto).strip()
+    return texto
+
+def procesar_opinion(texto):
+    """Procesa una opinión y devuelve el sentimiento"""
+    if not texto or texto == "":
+        return ""
+    if modelos.get('nlp') is None:
+        return "neutral"
+    pipeline = modelos['nlp']
+    texto_limpio = limpiar_texto_opinion(texto)
+    try:
+        return pipeline.predict([texto_limpio])[0]
+    except:
+        return "neutral"
+
+def formatear_tiempo(segundos):
+    """Formatea segundos a minutos:segundos"""
+    minutos = int(segundos // 60)
+    segs = int(segundos % 60)
+    return f"{minutos}:{segs:02d}"
+
+# =============================================================================
+# SIDEBAR - NAVEGACIÓN
+# =============================================================================
+
+with st.sidebar:
+    st.image("https://img.icons8.com/color/96/000000/hotel.png", width=80)
+    st.title("🏨 Hotel Gran Bali")
+    st.markdown("---")
+    
+    pagina = st.radio(
+        "**Menú Principal**",
+        ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "📋 Dataset"]
+    )
+    
+    st.markdown("---")
+    
+    with st.expander("ℹ️ Información del Sistema"):
+        st.markdown("""
+        **Modelos cargados:**
+        - ✅ ANN (clasificación)
+        - ✅ XGBoost (tiempos)
+        - ✅ K-Means (clusters)
+        - ✅ NLP (sentimiento)
+        
+        **Estado:** Activo
+        """)
+    
+    if st.button("🔄 Reiniciar Simulación", use_container_width=True):
+        for key in ['df_pms', 'incidencias', 'opiniones', 'camarera_actual', 
+                    'cronometro_activo', 'tiempo_inicio', 'habitacion_actual']:
+            if key in st.session_state:
+                if key == 'incidencias':
+                    st.session_state[key] = []
+                elif key == 'opiniones':
+                    st.session_state[key] = []
+                else:
+                    st.session_state[key] = None
+        st.rerun()
+
+# =============================================================================
+# VISTA GERENTE
+# =============================================================================
+
+if pagina == "📊 Gerente":
+    st.title("📊 Dashboard Gerente - Hotel Gran Bali")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("📂 Cargar PMS del día")
+        archivo = st.file_uploader(
+            "Selecciona archivo CSV",
+            type=['csv']
+        )
+        
+        if archivo is not None and st.session_state.df_pms is None:
+            with st.spinner("Procesando archivo..."):
+                df = pd.read_csv(archivo)
+                st.session_state.df_pms = df
+                st.success(f"✅ PMS cargado correctamente: {len(df)} habitaciones")
+                st.rerun()
+    
+    with col2:
+        if st.session_state.df_pms is not None:
+            df = st.session_state.df_pms
+            st.subheader("📊 Resumen del día")
+            
+            col_metric1, col_metric2, col_metric3 = st.columns(3)
+            with col_metric1:
+                st.metric("Habitaciones", len(df))
+            with col_metric2:
+                checkouts = len(df[df['clase_checkout'] == 'Salida']) if 'clase_checkout' in df.columns else 0
+                st.metric("Checkouts", checkouts)
+            with col_metric3:
+                repasos = len(df[df['clase_checkout'] == 'Repaso']) if 'clase_checkout' in df.columns else 0
+                st.metric("Repasos", repasos)
+    
+    if st.session_state.df_pms is not None:
+        df = st.session_state.df_pms
+        st.markdown("---")
+        
+        st.subheader("📈 Indicadores Clave")
+        col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+        
+        with col_kpi1:
+            ocupacion = len(df) / 446 * 100
+            st.metric("Ocupación", f"{ocupacion:.1f}%", delta=f"{len(df)}/446 habs")
+        
+        with col_kpi2:
+            if 'tiempo_estimado' in df.columns:
+                tiempo_total = df['tiempo_estimado'].sum()
+                st.metric("Tiempo total", f"{tiempo_total:.0f} min")
+        
+        with col_kpi3:
+            if 'planta' in df.columns:
+                plantas_ocupadas = df['planta'].nunique()
+                st.metric("Plantas activas", f"{plantas_ocupadas}/51")
+        
+        with col_kpi4:
+            st.metric("Camareras necesarias", "35")
+        
+        st.markdown("---")
+        col_graf1, col_graf2 = st.columns(2)
+        
+        with col_graf1:
+            st.subheader("🏢 Distribución por planta")
+            if 'planta' in df.columns:
+                planta_counts = df['planta'].value_counts().sort_index()
+                fig = px.bar(
+                    x=planta_counts.index,
+                    y=planta_counts.values,
+                    labels={'x': 'Planta', 'y': 'Habitaciones'},
+                    title=f'Habitaciones por planta'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col_graf2:
+            st.subheader("📊 Tipo de servicio")
+            if 'clase_checkout' in df.columns:
+                tipo_counts = df['clase_checkout'].value_counts()
+                fig = px.pie(
+                    values=tipo_counts.values,
+                    names=tipo_counts.index,
+                    title='Salidas vs Repasos'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        st.subheader("📋 Detalle de habitaciones")
+        st.dataframe(df.head(100), use_container_width=True, height=400)
+
+# =============================================================================
+# VISTA CAMARERA
+# =============================================================================
+
+elif pagina == "🧹 Camarera":
+    st.title("🧹 App Camarera - Hotel Gran Bali")
+    
+    if st.session_state.df_pms is None:
+        st.warning("⚠️ El gerente debe cargar el PMS primero")
+    else:
+        df = st.session_state.df_pms
+        
+        if st.session_state.camarera_actual is None:
+            st.subheader("👤 Selecciona tu perfil")
+            camareras = [f"Camarera {i:02d}" for i in range(1, 36)]
+            st.session_state.camarera_actual = st.selectbox(
+                "Nombre:",
+                camareras,
+                index=None,
+                placeholder="Elige tu nombre..."
+            )
+            
+            if st.session_state.camarera_actual:
+                st.rerun()
+        else:
+            col_info1, col_info2, col_info3 = st.columns(3)
+            with col_info1:
+                st.success(f"👤 {st.session_state.camarera_actual}")
+            with col_info2:
+                import hashlib
+                hash_val = int(hashlib.md5(st.session_state.camarera_actual.encode()).hexdigest(), 16)
+                sector_idx = hash_val % 3
+                sectores = ['Bajo (Pl 2-15)', 'Medio (Pl 16-30)', 'Alto (Pl 31-52)']
+                st.info(f"📌 Sector: {sectores[sector_idx]}")
+            with col_info3:
+                if st.button("🔄 Cambiar usuario"):
+                    st.session_state.camarera_actual = None
+                    st.rerun()
+            
+            st.markdown("---")
+            
+            np.random.seed(hash(f"{st.session_state.camarera_actual}_{datetime.now().day}") % 2**32)
+            indices = np.random.choice(len(df), size=min(8, len(df)), replace=False)
+            habitaciones_asignadas = df.iloc[indices].copy()
+            
+            st.subheader("📋 Mis habitaciones hoy")
+            
+            for idx, row in habitaciones_asignadas.iterrows():
+                with st.container():
+                    cols = st.columns([3, 2, 2, 3])
+                    
+                    with cols[0]:
+                        tipo_emoji = "🔴" if row.get('clase_checkout') == 'Salida' else "🟡"
+                        st.markdown(f"{tipo_emoji} **Hab {int(row['habitacion_id'])}**")
+                        st.caption(f"Planta {int(row['planta'])}")
+                    
+                    with cols[1]:
+                        tipo_serv = row.get('clase_checkout', 'N/A')
+                        if tipo_serv == 'Salida':
+                            st.markdown("🏃 **Checkout**")
+                        else:
+                            st.markdown("🛏️ **Repaso**")
+                    
+                    with cols[2]:
+                        if 'tiempo_estimado' in row:
+                            st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
+                    
+                    with cols[3]:
+                        if not st.session_state.cronometro_activo:
+                            if st.button(f"▶️ Iniciar", key=f"btn_{idx}"):
+                                st.session_state.habitacion_actual = row
+                                st.session_state.cronometro_activo = True
+                                st.session_state.tiempo_inicio = datetime.now()
+                                st.rerun()
+                        else:
+                            st.button(f"⏸️ En curso", key=f"btn_{idx}", disabled=True)
+                    
+                    st.divider()
+            
+            if st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None:
+                st.markdown("---")
+                st.subheader("⏱️ Limpieza en curso")
+                
+                hab = st.session_state.habitacion_actual
+                
+                col_crono1, col_crono2, col_crono3 = st.columns(3)
+                
+                with col_crono1:
+                    st.markdown(f"**Habitación:** {int(hab['habitacion_id'])}")
+                    st.markdown(f"**Planta:** {int(hab['planta'])}")
+                
+                with col_crono2:
+                    tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
+                    st.markdown(f"**Tiempo:** {formatear_tiempo(tiempo_transcurrido)}")
+                    if 'tiempo_estimado' in hab:
+                        progreso = min(tiempo_transcurrido / (hab['tiempo_estimado'] * 60), 1.0)
+                        st.progress(progreso)
+                
+                with col_crono3:
+                    if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True):
+                        st.success("✅ Limpieza completada")
+                        st.session_state.cronometro_activo = False
+                        st.session_state.habitacion_actual = None
+                        st.rerun()
+                
+                with st.expander("⚠️ Reportar incidencia"):
+                    tipo_inc = st.selectbox(
+                        "Tipo de incidencia",
+                        ["Avería", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"]
+                    )
+                    desc_inc = st.text_area("Descripción")
+                    if st.button("Enviar reporte", use_container_width=True):
+                        st.session_state.incidencias.append({
+                            'habitacion': int(hab['habitacion_id']),
+                            'planta': int(hab['planta']),
+                            'tipo': tipo_inc,
+                            'descripcion': desc_inc,
+                            'timestamp': datetime.now().strftime("%H:%M"),
+                            'fecha': datetime.now().strftime("%d/%m/%Y")
+                        })
+                        st.success("✅ Incidencia reportada")
+                        st.session_state.cronometro_activo = False
+                        st.session_state.habitacion_actual = None
+                        st.rerun()
+
+# =============================================================================
+# VISTA INCIDENCIAS
+# =============================================================================
+
+elif pagina == "⚠️ Incidencias":
+    st.title("⚠️ Panel de Incidencias - Hotel Gran Bali")
+    
+    tab1, tab2 = st.tabs(["📋 Incidencias activas", "📝 Registrar opinión"])
+    
+    with tab1:
+        if st.session_state.incidencias:
+            for inc in reversed(st.session_state.incidencias):
+                with st.container():
+                    col_inc1, col_inc2 = st.columns([3, 1])
+                    with col_inc1:
+                        st.warning(f"**{inc['timestamp']} - {inc['fecha']}**")
+                        st.markdown(f"**Habitación {inc['habitacion']}** (Planta {inc['planta']})")
+                        st.markdown(f"**{inc['tipo']}:** {inc['descripcion']}")
+                    with col_inc2:
+                        if st.button("✓ Resolver", key=f"resolver_{len(st.session_state.incidencias)}"):
+                            st.session_state.incidencias.remove(inc)
+                            st.rerun()
+                    st.divider()
+        else:
+            st.info("✅ No hay incidencias registradas")
+    
+    with tab2:
+        st.subheader("📝 Registrar opinión de cliente")
+        
+        with st.form("form_opinion"):
+            col_form1, col_form2 = st.columns(2)
+            
+            with col_form1:
+                hab_id = st.number_input(
+                    "Número de habitación",
+                    min_value=100,
+                    max_value=5299,
+                    value=1205,
+                    step=1
+                )
+            
+            with col_form2:
+                fecha_opinion = datetime.now().strftime("%d/%m/%Y %H:%M")
+                st.caption(f"Fecha: {fecha_opinion}")
+            
+            opinion_text = st.text_area(
+                "Opinión del cliente",
+                placeholder="Ej: La habitación estaba muy limpia, todo perfecto",
+                height=100
+            )
+            
+            submitted = st.form_submit_button("📤 Registrar opinión", use_container_width=True)
+            
+            if submitted and opinion_text:
+                sentimiento = procesar_opinion(opinion_text)
+                st.session_state.opiniones.append({
+                    'habitacion': hab_id,
+                    'opinion': opinion_text,
+                    'sentimiento': sentimiento,
+                    'timestamp': datetime.now().strftime("%H:%M"),
+                    'fecha': datetime.now().strftime("%d/%m/%Y")
+                })
+                st.success(f"✅ Opinión registrada - Sentimiento: **{sentimiento}**")
+                st.rerun()
+
+# =============================================================================
+# VISTA DATASET
+# =============================================================================
+
+elif pagina == "📋 Dataset":
+    st.title("📋 Dataset Enriquecido")
+    
+    if st.session_state.df_pms is None:
+        st.warning("⚠️ Primero carga un archivo PMS en la vista Gerente")
+    else:
+        df = st.session_state.df_pms.copy()
+        
+        if st.session_state.opiniones:
+            for op in st.session_state.opiniones:
+                mask = df['habitacion_id'] == op['habitacion']
+                if mask.any():
+                    df.loc[mask, 'opinion_cliente'] = op['opinion']
+                    df.loc[mask, 'sentimiento_nlp'] = op['sentimiento']
+        
+        st.subheader("📊 Métricas del dataset")
+        col_met1, col_met2, col_met3, col_met4 = st.columns(4)
+        
+        with col_met1:
+            st.metric("Total registros", len(df))
+        with col_met2:
+            st.metric("Con opiniones", len([o for o in st.session_state.opiniones]))
+        with col_met3:
+            st.metric("Incidencias", len(st.session_state.incidencias))
+        with col_met4:
+            if 'clase_checkout' in df.columns:
+                checkouts = len(df[df['clase_checkout'] == 'Salida'])
+                st.metric("Checkouts", checkouts)
+        
+        st.subheader("📋 Datos completos")
+        st.dataframe(df, use_container_width=True, height=500)
+        
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar CSV enriquecido",
+            data=csv,
+            file_name=f"hotel_pms_enriquecido_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+# =============================================================================
+# PIE DE PÁGINA
+# =============================================================================
+
+st.markdown("---")
+col_footer1, col_footer2, col_footer3 = st.columns(3)
+with col_footer1:
+    st.markdown("🏨 **Hotel Gran Bali**")
+with col_footer2:
+    st.markdown("🤖 **Sistema IA de Gestión de Limpieza**")
+with col_footer3:
+    st.markdown(f"🕒 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
