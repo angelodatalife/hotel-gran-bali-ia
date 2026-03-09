@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con Incidencias y Mantenimiento separados
+# Versión con Stand By, contadores y tipos actualizados
 # =============================================================================
 
 import streamlit as st
@@ -65,6 +65,8 @@ if 'incidencias' not in st.session_state:
     st.session_state.incidencias = []  # Problemas operativos
 if 'mantenimiento' not in st.session_state:
     st.session_state.mantenimiento = []  # Averías técnicas
+if 'standby' not in st.session_state:
+    st.session_state.standby = []  # Habitaciones en espera (ocupadas, muy sucias, falta suministros)
 if 'opiniones' not in st.session_state:
     st.session_state.opiniones = []
 if 'camarera_actual' not in st.session_state:
@@ -260,7 +262,7 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
     return asignacion
 
 # =============================================================================
-# SIDEBAR - NAVEGACIÓN
+# SIDEBAR - NAVEGACIÓN CON CONTADORES
 # =============================================================================
 
 with st.sidebar:
@@ -268,10 +270,27 @@ with st.sidebar:
     st.title("🏨 Hotel Gran Bali")
     st.markdown("---")
     
+    # Opciones del menú con contadores
+    opciones_menu = ["📊 Gerente", "🧹 Camarera"]
+    
+    # Añadir contadores a Incidencias y Mantenimiento
+    inc_count = len(st.session_state.incidencias)
+    mant_count = len(st.session_state.mantenimiento)
+    
+    opciones_menu.append(f"⚠️ Incidencias ({inc_count})" if inc_count > 0 else "⚠️ Incidencias")
+    opciones_menu.append(f"🔧 Mantenimiento ({mant_count})" if mant_count > 0 else "🔧 Mantenimiento")
+    opciones_menu.append("📋 Dataset")
+    
     pagina = st.radio(
         "**Menú Principal**",
-        ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "🔧 Mantenimiento", "📋 Dataset"]
+        opciones_menu
     )
+    
+    # Limpiar el texto de los contadores para la lógica interna
+    if pagina.startswith("⚠️ Incidencias"):
+        pagina = "⚠️ Incidencias"
+    elif pagina.startswith("🔧 Mantenimiento"):
+        pagina = "🔧 Mantenimiento"
     
     st.markdown("---")
     
@@ -287,11 +306,11 @@ with st.sidebar:
         """)
     
     if st.button("🔄 Reiniciar Simulación", use_container_width=True):
-        for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
+        for key in ['df_pms', 'incidencias', 'mantenimiento', 'standby', 'opiniones', 'camarera_actual', 
                     'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                     'asignacion_por_camarera', 'habitaciones_completadas']:
             if key in st.session_state:
-                if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas']:
+                if key in ['incidencias', 'mantenimiento', 'standby', 'opiniones', 'habitaciones_completadas']:
                     st.session_state[key] = []
                 else:
                     st.session_state[key] = None
@@ -568,10 +587,11 @@ elif pagina == "🧹 Camarera":
             
             total_asignadas = len(df_asignadas)
             completadas = len(st.session_state.habitaciones_completadas)
-            pendientes = total_asignadas - completadas
+            standby = len([s for s in st.session_state.standby if s not in st.session_state.habitaciones_completadas])
+            pendientes = total_asignadas - completadas - standby
             
             # Mostrar información de la camarera
-            col_info1, col_info2, col_info3 = st.columns(3)
+            col_info1, col_info2, col_info3, col_info4 = st.columns([2, 2, 1, 1])
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
             with col_info2:
@@ -590,7 +610,12 @@ elif pagina == "🧹 Camarera":
                 else:
                     st.info("📌 Sin asignación")
             with col_info3:
-                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal"):
+                if standby > 0:
+                    st.info(f"⏸️ **Stand By**\n{standby}")
+                else:
+                    st.info("⏸️ Stand By\n0")
+            with col_info4:
+                if st.button("🔄 Cambiar", key="btn_cambiar_usuario_principal"):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
                     st.rerun()
@@ -646,12 +671,12 @@ elif pagina == "🧹 Camarera":
                     with st.expander("⚠️ Reportar problema"):
                         tipo_reporte = st.selectbox(
                             "Tipo de problema",
-                            ["Avería (Mantenimiento)", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"],
+                            ["Avería (Mantenimiento)", "Falta suministros", "Muy sucia", "Ocupada", "Otro"],
                             key="tipo_reporte_cron"
                         )
                         desc_reporte = st.text_area("Descripción", key="desc_reporte_cron")
                         if st.button("Enviar reporte", key="btn_reporte_cron", use_container_width=True):
-                            # Separar según el tipo
+                            # Avería va a mantenimiento
                             if tipo_reporte == "Avería (Mantenimiento)":
                                 st.session_state.mantenimiento.append({
                                     'habitacion': int(hab['habitacion_id']),
@@ -663,7 +688,20 @@ elif pagina == "🧹 Camarera":
                                     'reportado_por': st.session_state.camarera_actual
                                 })
                                 st.success("🔧 Reporte enviado a Mantenimiento")
+                                # Mover a completadas (no vuelve a aparecer)
+                                st.session_state.habitaciones_completadas.append(hab['habitacion_id'])
+                            
+                            # Otros tipos van a incidencias o standby según corresponda
                             else:
+                                # Estos van a standby (se quedan pendientes)
+                                if tipo_reporte in ["Falta suministros", "Muy sucia", "Ocupada"]:
+                                    st.session_state.standby.append(hab['habitacion_id'])
+                                    st.info(f"⏸️ Habitación {int(hab['habitacion_id'])} movida a Stand By")
+                                else:  # Otro
+                                    st.session_state.standby.append(hab['habitacion_id'])
+                                    st.info(f"⏸️ Habitación {int(hab['habitacion_id'])} movida a Stand By")
+                                
+                                # Registrar en incidencias también
                                 st.session_state.incidencias.append({
                                     'habitacion': int(hab['habitacion_id']),
                                     'planta': int(hab['planta']),
@@ -673,10 +711,8 @@ elif pagina == "🧹 Camarera":
                                     'fecha': datetime.now().strftime("%d/%m/%Y"),
                                     'reportado_por': st.session_state.camarera_actual
                                 })
-                                st.success("⚠️ Incidencia reportada")
+                                st.warning("⚠️ Incidencia registrada")
                             
-                            # Mover a completadas
-                            st.session_state.habitaciones_completadas.append(hab['habitacion_id'])
                             st.session_state.cronometro_activo = False
                             st.session_state.habitacion_actual = None
                             time.sleep(1)
@@ -686,8 +722,10 @@ elif pagina == "🧹 Camarera":
             
             # ===== SECCIÓN 2: HABITACIONES PENDIENTES =====
             if total_asignadas > 0:
+                # Excluir completadas y standby
                 df_pendientes = df_asignadas[
-                    ~df_asignadas['habitacion_id'].isin(st.session_state.habitaciones_completadas)
+                    ~df_asignadas['habitacion_id'].isin(st.session_state.habitaciones_completadas) &
+                    ~df_asignadas['habitacion_id'].isin(st.session_state.standby)
                 ].copy()
                 
                 if 'late_checkout_pred' in df_pendientes.columns:
@@ -696,11 +734,10 @@ elif pagina == "🧹 Camarera":
                         ascending=[False, False]
                     )
                 
-                st.markdown(f"### Pendientes ({pendientes} restantes)")
+                st.markdown(f"### Pendientes ({len(df_pendientes)} restantes)")
                 
-                if pendientes == 0:
-                    st.success("🎉 ¡Has completado todas tus habitaciones!")
-                    st.balloons()
+                if len(df_pendientes) == 0:
+                    st.success("🎉 ¡No hay habitaciones pendientes!")
                 else:
                     # Usar un contador para generar keys únicos
                     for i, (_, row) in enumerate(df_pendientes.iterrows()):
@@ -747,7 +784,44 @@ elif pagina == "🧹 Camarera":
                             
                             st.divider()
             
-            # ===== SECCIÓN 3: HABITACIONES COMPLETADAS =====
+            # ===== SECCIÓN 3: HABITACIONES EN STAND BY =====
+            if standby > 0:
+                st.markdown("---")
+                st.subheader(f"⏸️ Stand By ({standby})")
+                
+                df_standby = df_asignadas[
+                    df_asignadas['habitacion_id'].isin(st.session_state.standby)
+                ]
+                
+                for i, (_, row) in enumerate(df_standby.iterrows()):
+                    with st.container():
+                        cols = st.columns([3, 2, 2, 3])
+                        
+                        with cols[0]:
+                            st.markdown(f"⏸️ **Hab {int(row['habitacion_id'])}**")
+                            st.caption(f"Planta {int(row['planta'])}")
+                        
+                        with cols[1]:
+                            st.markdown("⏸️ **En espera**")
+                        
+                        with cols[2]:
+                            if 'tiempo_estimado' in row:
+                                st.markdown(f"⏱️ {row['tiempo_estimado']} min")
+                        
+                        with cols[3]:
+                            # Botón para reintentar
+                            if st.button(
+                                f"🔄 Reintentar", 
+                                key=f"btn_reintentar_{row['habitacion_id']}_{i}",
+                                use_container_width=True
+                            ):
+                                # Quitar de standby
+                                st.session_state.standby.remove(row['habitacion_id'])
+                                st.rerun()
+                        
+                        st.divider()
+            
+            # ===== SECCIÓN 4: HABITACIONES COMPLETADAS =====
             if completadas > 0:
                 st.markdown("---")
                 st.subheader(f"✅ Completadas ({completadas}/{total_asignadas})")
@@ -790,7 +864,7 @@ elif pagina == "🧹 Camarera":
 
 elif pagina == "⚠️ Incidencias":
     st.title("⚠️ Panel de Incidencias Operativas")
-    st.caption("Problemas de suministros, limpieza, clientes, etc.")
+    st.caption("Problemas de suministros, limpieza, ocupadas, etc.")
     
     if st.session_state.incidencias:
         for inc in reversed(st.session_state.incidencias):
@@ -873,7 +947,7 @@ elif pagina == "📋 Dataset":
                     df.loc[mask, 'sentimiento_nlp'] = op['sentimiento']
         
         st.subheader("📊 Métricas")
-        col_met1, col_met2, col_met3, col_met4 = st.columns(4)
+        col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
         with col_met1:
             st.metric("Registros", len(df))
         with col_met2:
@@ -882,6 +956,8 @@ elif pagina == "📋 Dataset":
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_met4:
             st.metric("Mantenimiento", len(st.session_state.mantenimiento))
+        with col_met5:
+            st.metric("Stand By", len(st.session_state.standby))
         
         st.subheader("📋 Datos completos")
         st.dataframe(df, use_container_width=True, height=500)
