@@ -220,33 +220,50 @@ with st.sidebar:
     st.markdown("---")
     
     # Menú principal con contadores en la misma línea
-    opciones_menu = ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "🔧 Mantenimiento", "📋 Dataset"]
+    st.markdown("**Menú Principal**")
     
-    # Crear layout para el menú
-    for opcion in opciones_menu:
-        cols = st.columns([3, 1, 1])
-        with cols[0]:
-            if opcion == "⚠️ Incidencias":
-                selected = st.radio(
-                    "**Menú Principal**",
-                    opciones_menu,
-                    key="main_menu",
-                    label_visibility="collapsed"
-                )
-            else:
-                # Para las otras opciones, solo mostramos el texto sin radio
-                if opcion == selected if 'selected' in locals() else False:
-                    st.markdown(f"**→ {opcion}**")
-                else:
-                    st.markdown(opcion)
-        
-        # Contadores para Incidencias y Mantenimiento
-        with cols[1]:
-            if opcion == "⚠️ Incidencias" and st.session_state.incidencias:
-                st.markdown(f"**({len(st.session_state.incidencias)})**")
-        with cols[2]:
-            if opcion == "🔧 Mantenimiento" and st.session_state.mantenimiento:
-                st.markdown(f"**({len(st.session_state.mantenimiento)})**")
+    # Gerente
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        if st.button("📊 Gerente", key="btn_gerente", use_container_width=True):
+            st.session_state.main_menu = "📊 Gerente"
+    with col2:
+        st.markdown(" ")  # Espacio vacío
+    
+    # Camarera
+    if st.button("🧹 Camarera", key="btn_camarera", use_container_width=True):
+        st.session_state.main_menu = "🧹 Camarera"
+    
+    # Incidencias con contador
+    col_inc1, col_inc2 = st.columns([4, 1])
+    with col_inc1:
+        if st.button("⚠️ Incidencias", key="btn_incidencias", use_container_width=True):
+            st.session_state.main_menu = "⚠️ Incidencias"
+    with col_inc2:
+        if st.session_state.incidencias:
+            st.markdown(f"**({len(st.session_state.incidencias)})**")
+        else:
+            st.markdown(" ")
+    
+    # Mantenimiento con contador
+    col_mant1, col_mant2 = st.columns([4, 1])
+    with col_mant1:
+        if st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True):
+            st.session_state.main_menu = "🔧 Mantenimiento"
+    with col_mant2:
+        if st.session_state.mantenimiento:
+            st.markdown(f"**({len(st.session_state.mantenimiento)})**")
+        else:
+            st.markdown(" ")
+    
+    # Dataset
+    if st.button("📋 Dataset", key="btn_dataset", use_container_width=True):
+        st.session_state.main_menu = "📋 Dataset"
+    
+    # Obtener la página seleccionada
+    if 'main_menu' not in st.session_state:
+        st.session_state.main_menu = "📊 Gerente"
+    selected = st.session_state.main_menu
     
     st.markdown("---")
     
@@ -305,7 +322,7 @@ with st.sidebar:
     if st.button("🔄 Reiniciar Simulación", use_container_width=True):
         for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                     'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
-                    'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby']:
+                    'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 'main_menu']:
             if key in st.session_state:
                 if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'habitaciones_standby']:
                     st.session_state[key] = []
