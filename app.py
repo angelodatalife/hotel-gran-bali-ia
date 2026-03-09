@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con Stand By, contadores y mejoras UI
+# Versión con mejoras UI y correcciones
 # =============================================================================
 
 import streamlit as st
@@ -80,6 +80,8 @@ if 'habitaciones_completadas' not in st.session_state:
     st.session_state.habitaciones_completadas = []
 if 'habitaciones_standby' not in st.session_state:
     st.session_state.habitaciones_standby = []  # Lista de IDs en Stand By
+if 'reporte_expander_open' not in st.session_state:
+    st.session_state.reporte_expander_open = False
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -214,28 +216,29 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
 # =============================================================================
 
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/000000/hotel.png", width=80)
     st.title("🏨 Hotel Gran Bali")
     st.markdown("---")
     
-    # Mostrar contadores junto a las opciones
-    col_m1, col_m2 = st.columns([3, 1])
-    with col_m1:
+    # Menú principal con contadores
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
         selected = st.radio(
             "**Menú Principal**",
             ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "🔧 Mantenimiento", "📋 Dataset"],
             key="main_menu"
         )
-    with col_m2:
+    with col2:
         st.markdown("###")
         if st.session_state.incidencias:
-            st.markdown(f"🔴 **{len(st.session_state.incidencias)}**")
+            st.markdown(f"**({len(st.session_state.incidencias)})**")
+    with col3:
+        st.markdown("###")
         if st.session_state.mantenimiento:
-            st.markdown(f"🔧 **{len(st.session_state.mantenimiento)}**")
+            st.markdown(f"**({len(st.session_state.mantenimiento)})**")
     
     st.markdown("---")
     
-    # Cargar archivo CSV (ahora debajo del menú)
+    # Cargar archivo CSV
     st.subheader("📂 Cargar PMS")
     archivo = st.file_uploader("Selecciona archivo CSV", type=['csv'], key="file_uploader_sidebar")
     
@@ -271,7 +274,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Modelos cargados (reemplaza "Información del Sistema")
+    # Modelos cargados
     st.subheader("🤖 Modelos cargados")
     modelos_lista = {
         'ANN': modelos.get('ann') is not None,
@@ -427,11 +430,15 @@ elif selected == "🧹 Camarera":
                             
                             st.session_state.cronometro_activo = False
                             st.session_state.habitacion_actual = None
+                            st.session_state.reporte_expander_open = False
                             time.sleep(1)
                             st.rerun()
                     
-                    # Reportar problema (el cronómetro NO se detiene para mantenimiento)
-                    with st.expander("⚠️ Reportar problema"):
+                    # Reportar problema con expander controlado
+                    expander_key = "reporte_expander"
+                    expander_open = st.session_state.get('reporte_expander_open', False)
+                    
+                    with st.expander("⚠️ Reportar problema", expanded=expander_open):
                         tipo_reporte = st.selectbox(
                             "Tipo de problema",
                             ["Mantenimiento (avería)", "Falta suministros", "Muy sucia", "Ocupada", "Otro"],
@@ -456,6 +463,7 @@ elif selected == "🧹 Camarera":
                                         'reportado_por': st.session_state.camarera_actual
                                     })
                                     st.success("🔧 Reporte enviado a Mantenimiento")
+                                    st.session_state.reporte_expander_open = False
                                     st.rerun()
                                 
                                 # Incidencias: van a Stand By
@@ -479,11 +487,13 @@ elif selected == "🧹 Camarera":
                                     # Reiniciar cronómetro (para nueva habitación)
                                     st.session_state.cronometro_activo = False
                                     st.session_state.habitacion_actual = None
+                                    st.session_state.reporte_expander_open = False
                                     time.sleep(1)
                                     st.rerun()
                         
                         with col_rep2:
                             if st.button("Cancelar", key="btn_reporte_cancelar"):
+                                st.session_state.reporte_expander_open = False
                                 st.rerun()
                     
                     st.markdown("---")
@@ -577,6 +587,7 @@ elif selected == "🧹 Camarera":
                                         st.session_state.habitacion_actual = row
                                         st.session_state.cronometro_activo = True
                                         st.session_state.tiempo_inicio = datetime.now()
+                                        st.session_state.reporte_expander_open = False
                                         st.rerun()
                             
                             st.divider()
