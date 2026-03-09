@@ -243,7 +243,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CON HABITACIONES COMPLETADAS
+# VISTA CAMARERA - CON LIMPIEZA EN CURSO ARRIBA
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -338,7 +338,7 @@ elif pagina == "🧹 Camarera":
             plantas_asignadas = clusteres_plantas[cluster]
             sector = 'Bajo' if cluster <= 6 else ('Medio' if cluster <= 11 else 'Alto')
             
-            # Mostrar información
+            # Mostrar información de la camarera
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
@@ -353,6 +353,79 @@ elif pagina == "🧹 Camarera":
             
             st.markdown("---")
             
+            # ===== SECCIÓN 1: LIMPIEZA EN CURSO (ARRIBA) =====
+            if st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None:
+                with st.container():
+                    st.subheader("⏱️ Limpieza en curso")
+                    
+                    hab = st.session_state.habitacion_actual
+                    
+                    col_crono1, col_crono2, col_crono3 = st.columns(3)
+                    
+                    with col_crono1:
+                        st.markdown(f"**Habitación:** {int(hab['habitacion_id'])}")
+                        st.markdown(f"**Planta:** {int(hab['planta'])}")
+                    
+                    with col_crono2:
+                        tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
+                        st.markdown(f"**Tiempo:** {formatear_tiempo(tiempo_transcurrido)}")
+                        if 'tiempo_estimado' in hab:
+                            progreso = min(tiempo_transcurrido / (hab['tiempo_estimado'] * 60), 1.0)
+                            st.progress(progreso)
+                    
+                    with col_crono3:
+                        if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True):
+                            # Calcular tiempo real
+                            tiempo_real = (datetime.now() - st.session_state.tiempo_inicio).seconds / 60
+                            
+                            # Guardar en el DataFrame principal
+                            hab_id = hab['habitacion_id']
+                            df.loc[df['habitacion_id'] == hab_id, 'tiempo_real'] = round(tiempo_real, 1)
+                            st.session_state.df_pms = df
+                            
+                            # Añadir a la lista de completadas
+                            st.session_state.habitaciones_completadas.append(hab_id)
+                            
+                            # Mensaje de éxito
+                            st.success(f"✅ Habitación {int(hab_id)} completada en {tiempo_real:.1f} minutos")
+                            
+                            # Reiniciar cronómetro
+                            st.session_state.cronometro_activo = False
+                            st.session_state.habitacion_actual = None
+                            time.sleep(1)
+                            st.rerun()
+                    
+                    # Reportar incidencia (dentro del mismo contenedor)
+                    with st.expander("⚠️ Reportar incidencia"):
+                        tipo_inc = st.selectbox(
+                            "Tipo de incidencia",
+                            ["Avería", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"],
+                            key="tipo_inc_cron"
+                        )
+                        desc_inc = st.text_area("Descripción", key="desc_inc_cron")
+                        if st.button("Enviar reporte", key="btn_inc_cron", use_container_width=True):
+                            st.session_state.incidencias.append({
+                                'habitacion': int(hab['habitacion_id']),
+                                'planta': int(hab['planta']),
+                                'tipo': tipo_inc,
+                                'descripcion': desc_inc,
+                                'timestamp': datetime.now().strftime("%H:%M"),
+                                'fecha': datetime.now().strftime("%d/%m/%Y")
+                            })
+                            st.success("✅ Incidencia reportada")
+                            
+                            # También mover a completadas aunque haya incidencia
+                            hab_id = hab['habitacion_id']
+                            st.session_state.habitaciones_completadas.append(hab_id)
+                            
+                            st.session_state.cronometro_activo = False
+                            st.session_state.habitacion_actual = None
+                            time.sleep(1)
+                            st.rerun()
+                    
+                    st.markdown("---")
+            
+            # ===== SECCIÓN 2: HABITACIONES PENDIENTES =====
             # Filtrar habitaciones de sus plantas asignadas que NO estén completadas
             df_asignadas = df[df['planta'].isin(plantas_asignadas)].copy()
             
@@ -405,8 +478,7 @@ elif pagina == "🧹 Camarera":
             else:
                 df_pendientes = df_pendientes.sort_values('habitacion_id', ascending=False)
             
-            # SECCIÓN 1: HABITACIONES PENDIENTES
-            st.subheader(f"📋 Pendientes (Plantas {min(plantas_asignadas)}-{max(plantas_asignadas)})")
+            st.subheader(f"📋 Pendientes ({len(df_pendientes)} restantes)")
             
             if len(df_pendientes) == 0:
                 st.success("🎉 ¡Has completado todas tus habitaciones!")
@@ -433,21 +505,25 @@ elif pagina == "🧹 Camarera":
                                 st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
                         
                         with cols[3]:
-                            if not st.session_state.cronometro_activo:
-                                if st.button(f"▶️ Iniciar", key=f"btn_{idx}"):
-                                    st.session_state.habitacion_actual = row
-                                    st.session_state.cronometro_activo = True
-                                    st.session_state.tiempo_inicio = datetime.now()
-                                    st.rerun()
-                            else:
-                                st.button(f"⏸️ En curso", key=f"btn_{idx}", disabled=True)
+                            # Deshabilitar botón si hay una limpieza en curso
+                            disabled = st.session_state.cronometro_activo
+                            if st.button(
+                                f"▶️ Iniciar", 
+                                key=f"btn_{idx}", 
+                                disabled=disabled,
+                                use_container_width=True
+                            ):
+                                st.session_state.habitacion_actual = row
+                                st.session_state.cronometro_activo = True
+                                st.session_state.tiempo_inicio = datetime.now()
+                                st.rerun()
                         
                         st.divider()
             
-            # SECCIÓN 2: HABITACIONES COMPLETADAS HOY
+            # ===== SECCIÓN 3: HABITACIONES COMPLETADAS =====
             if st.session_state.habitaciones_completadas:
                 st.markdown("---")
-                st.subheader("✅ Completadas hoy")
+                st.subheader(f"✅ Completadas hoy ({len(st.session_state.habitaciones_completadas)})")
                 
                 # Obtener datos de las completadas
                 df_completadas = df[df['habitacion_id'].isin(
@@ -471,79 +547,12 @@ elif pagina == "🧹 Camarera":
                                 st.markdown(f"~~{row['tiempo_estimado']} min~~")
                         
                         with cols[3]:
-                            st.markdown("✅ Listo")
+                            if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
+                                st.markdown(f"✅ Real: {row['tiempo_real']} min")
+                            else:
+                                st.markdown("✅ Listo")
                         
                         st.divider()
-            
-            # Código del cronómetro (actualizado para mover a completadas)
-            if st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None:
-                st.markdown("---")
-                st.subheader("⏱️ Limpieza en curso")
-                
-                hab = st.session_state.habitacion_actual
-                
-                col_crono1, col_crono2, col_crono3 = st.columns(3)
-                
-                with col_crono1:
-                    st.markdown(f"**Habitación:** {int(hab['habitacion_id'])}")
-                    st.markdown(f"**Planta:** {int(hab['planta'])}")
-                
-                with col_crono2:
-                    tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
-                    st.markdown(f"**Tiempo:** {formatear_tiempo(tiempo_transcurrido)}")
-                    if 'tiempo_estimado' in hab:
-                        progreso = min(tiempo_transcurrido / (hab['tiempo_estimado'] * 60), 1.0)
-                        st.progress(progreso)
-                
-                with col_crono3:
-                    if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True):
-                        # Calcular tiempo real
-                        tiempo_real = (datetime.now() - st.session_state.tiempo_inicio).seconds / 60
-                        
-                        # Guardar en el DataFrame principal (opcional, para enriquecer)
-                        hab_id = hab['habitacion_id']
-                        df.loc[df['habitacion_id'] == hab_id, 'tiempo_real'] = round(tiempo_real, 1)
-                        st.session_state.df_pms = df
-                        
-                        # Añadir a la lista de completadas
-                        st.session_state.habitaciones_completadas.append(hab_id)
-                        
-                        # Mensaje de éxito
-                        st.success(f"✅ Habitación {int(hab_id)} completada en {tiempo_real:.1f} minutos")
-                        
-                        # Reiniciar cronómetro
-                        st.session_state.cronometro_activo = False
-                        st.session_state.habitacion_actual = None
-                        time.sleep(1)
-                        st.rerun()
-                
-                # Reportar incidencia (opcional, mantener igual)
-                with st.expander("⚠️ Reportar incidencia"):
-                    tipo_inc = st.selectbox(
-                        "Tipo de incidencia",
-                        ["Avería", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"],
-                        key="tipo_inc_cron"
-                    )
-                    desc_inc = st.text_area("Descripción", key="desc_inc_cron")
-                    if st.button("Enviar reporte", key="btn_inc_cron", use_container_width=True):
-                        st.session_state.incidencias.append({
-                            'habitacion': int(hab['habitacion_id']),
-                            'planta': int(hab['planta']),
-                            'tipo': tipo_inc,
-                            'descripcion': desc_inc,
-                            'timestamp': datetime.now().strftime("%H:%M"),
-                            'fecha': datetime.now().strftime("%d/%m/%Y")
-                        })
-                        st.success("✅ Incidencia reportada")
-                        
-                        # También mover a completadas aunque haya incidencia
-                        hab_id = hab['habitacion_id']
-                        st.session_state.habitaciones_completadas.append(hab_id)
-                        
-                        st.session_state.cronometro_activo = False
-                        st.session_state.habitacion_actual = None
-                        time.sleep(1)
-                        st.rerun()
 
 # =============================================================================
 # VISTA INCIDENCIAS
