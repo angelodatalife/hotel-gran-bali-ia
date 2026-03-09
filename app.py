@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con Stand By y contadores en menú
+# Versión con Stand By, contadores y separación Incidencias/Mantenimiento
 # =============================================================================
 
 import streamlit as st
@@ -62,7 +62,7 @@ modelos = cargar_modelos()
 if 'df_pms' not in st.session_state:
     st.session_state.df_pms = None
 if 'incidencias' not in st.session_state:
-    st.session_state.incidencias = []  # Problemas operativos (Falta suministro, Muy sucia, Ocupada, Otro)
+    st.session_state.incidencias = []  # Problemas operativos
 if 'mantenimiento' not in st.session_state:
     st.session_state.mantenimiento = []  # Averías técnicas
 if 'opiniones' not in st.session_state:
@@ -79,8 +79,8 @@ if 'asignacion_por_camarera' not in st.session_state:
     st.session_state.asignacion_por_camarera = {}
 if 'habitaciones_completadas' not in st.session_state:
     st.session_state.habitaciones_completadas = []
-if 'standby_por_camarera' not in st.session_state:
-    st.session_state.standby_por_camarera = {}  # Diccionario: {camarera: [lista de habitaciones en stand by]}
+if 'standby' not in st.session_state:
+    st.session_state.standby = []  # Habitaciones en espera (con problemas)
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -113,12 +113,7 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 def asignar_por_bloques_adyacentes(df, total_camareras=35):
-    """
-    Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES
-    - Divide las plantas en bloques consecutivos
-    - Usa K-Means para priorizar urgentes dentro del bloque
-    - Equilibra carga por tiempo estimado
-    """
+    """Asigna habitaciones por bloques de plantas adyacentes"""
     if df is None or len(df) == 0:
         return {}
     
@@ -169,8 +164,7 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
         bloque_actual.append(planta)
         carga_acumulada += carga_por_planta[planta]
         
-        # Si alcanzamos o superamos la carga ideal, cerramos el bloque
-        if carga_acumulada >= carga_ideal_por_cam * 0.8:  # 80% de la carga ideal
+        if carga_acumulada >= carga_ideal_por_cam * 0.8:
             bloques.append({
                 'plantas': bloque_actual.copy(),
                 'carga': carga_acumulada
@@ -178,86 +172,43 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
             bloque_actual = []
             carga_acumulada = 0
     
-    # Añadir el último bloque si quedó algo
     if bloque_actual:
         bloques.append({
             'plantas': bloque_actual,
             'carga': carga_acumulada
         })
     
-    # 5. Asignar camareras a bloques (1-2 camareras por bloque según carga)
+    # 5. Asignar camareras a bloques
     asignacion = {}
     cam_idx = 1
     
     for bloque in bloques:
         plantas_bloque = bloque['plantas']
         carga_bloque = bloque['carga']
-        
-        # Calcular cuántas camareras necesita este bloque
         num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
-        
-        # Obtener habitaciones de estas plantas
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
-        
-        # Ordenar por prioridad
         df_bloque = df_bloque.sort_values(
             by=['late_checkout_pred', 'habitacion_id'], 
             ascending=[False, True]
         )
         
-        # Dividir habitaciones entre las camareras del bloque
         if num_cam_bloque > 1:
-            # Dividir equitativamente
             habs_por_cam = len(df_bloque) // num_cam_bloque
             resto = len(df_bloque) % num_cam_bloque
-            
             inicio = 0
             for i in range(num_cam_bloque):
                 if cam_idx > total_camareras:
                     break
-                
                 fin = inicio + habs_por_cam + (1 if i < resto else 0)
                 df_cam = df_bloque.iloc[inicio:fin].copy()
-                
                 if len(df_cam) > 0:
                     asignacion[f"Camarera {cam_idx:02d}"] = df_cam
-                
                 inicio = fin
                 cam_idx += 1
         else:
-            # Una sola camarera para todo el bloque
             if cam_idx <= total_camareras:
                 asignacion[f"Camarera {cam_idx:02d}"] = df_bloque
                 cam_idx += 1
-    
-    # 6. Distribuir camareras restantes si no se llegó a 35
-    if cam_idx <= total_camareras:
-        # Buscar bloques con más carga y subdividir
-        bloques_ordenados = sorted(bloques, key=lambda x: x['carga'], reverse=True)
-        
-        for bloque in bloques_ordenados:
-            if cam_idx > total_camareras:
-                break
-            
-            plantas_bloque = bloque['plantas']
-            df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
-            
-            # Verificar cuántas camareras ya tienen este bloque
-            cam_en_bloque = [cam for cam, df_cam in asignacion.items() 
-                            if set(df_cam['planta'].unique()) & set(plantas_bloque)]
-            
-            if len(cam_en_bloque) < 3:  # Máximo 3 camareras por bloque
-                # Dividir el bloque en dos
-                mitad = len(df_bloque) // 2
-                df_cam1 = df_bloque.iloc[:mitad].copy()
-                df_cam2 = df_bloque.iloc[mitad:].copy()
-                
-                if len(df_cam1) > 0 and cam_idx <= total_camareras:
-                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam1
-                    cam_idx += 1
-                if len(df_cam2) > 0 and cam_idx <= total_camareras:
-                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam2
-                    cam_idx += 1
     
     return asignacion
 
@@ -271,26 +222,23 @@ with st.sidebar:
     st.markdown("---")
     
     # Contadores para el menú
-    incidencias_count = len(st.session_state.incidencias)
-    mantenimiento_count = len(st.session_state.mantenimiento)
+    num_incidencias = len(st.session_state.incidencias)
+    num_mantenimiento = len(st.session_state.mantenimiento)
     
-    # Opciones del menú con contadores
-    menu_options = {
+    opciones_menu = {
         "📊 Gerente": "📊 Gerente",
         "🧹 Camarera": "🧹 Camarera",
-        f"⚠️ Incidencias {'(' + str(incidencias_count) + ')' if incidencias_count > 0 else ''}": "⚠️ Incidencias",
-        f"🔧 Mantenimiento {'(' + str(mantenimiento_count) + ')' if mantenimiento_count > 0 else ''}": "🔧 Mantenimiento",
+        f"⚠️ Incidencias {f'({num_incidencias})' if num_incidencias > 0 else ''}": "⚠️ Incidencias",
+        f"🔧 Mantenimiento {f'({num_mantenimiento})' if num_mantenimiento > 0 else ''}": "🔧 Mantenimiento",
         "📋 Dataset": "📋 Dataset"
     }
     
-    selected_display = st.radio(
+    seleccion = st.radio(
         "**Menú Principal**",
-        list(menu_options.keys()),
+        list(opciones_menu.keys()),
         format_func=lambda x: x
     )
-    
-    # Obtener el valor real de la opción seleccionada
-    pagina = menu_options[selected_display]
+    pagina = opciones_menu[seleccion]
     
     st.markdown("---")
     
@@ -308,16 +256,16 @@ with st.sidebar:
     if st.button("🔄 Reiniciar Simulación", use_container_width=True):
         for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                     'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
-                    'asignacion_por_camarera', 'habitaciones_completadas', 'standby_por_camarera']:
+                    'asignacion_por_camarera', 'habitaciones_completadas', 'standby']:
             if key in st.session_state:
-                if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'standby_por_camarera']:
-                    st.session_state[key] = [] if key != 'standby_por_camarera' else {}
+                if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'standby']:
+                    st.session_state[key] = []
                 else:
                     st.session_state[key] = None
         st.rerun()
 
 # =============================================================================
-# VISTA GERENTE (sin cambios)
+# VISTA GERENTE
 # =============================================================================
 
 if pagina == "📊 Gerente":
@@ -385,31 +333,26 @@ if pagina == "📊 Gerente":
         # ===== DISTRIBUCIÓN POR SECTORES =====
         st.subheader("🏢 Distribución por Sectores")
         
-        # Definir sectores
         sectores = {
             'Bajo (Pl 2-15)': {'plantas': list(range(2, 16)), 'camareras_base': 19},
             'Medio (Pl 16-30)': {'plantas': list(range(16, 31)), 'camareras_base': 11},
             'Alto (Pl 31-52)': {'plantas': list(range(31, 53)), 'camareras_base': 5}
         }
         
-        # Calcular datos por sector
         datos_sectores = []
         for sector, info in sectores.items():
             df_sector = df[df['planta'].isin(info['plantas'])]
             num_hab = len(df_sector)
             
-            # Calcular camareras asignadas realmente (desde la asignación)
             cam_asignadas = 0
             if st.session_state.asignacion_por_camarera:
                 for cam, df_cam in st.session_state.asignacion_por_camarera.items():
                     if any(p in info['plantas'] for p in df_cam['planta'].unique()):
                         cam_asignadas += 1
             
-            # Usar base si no hay asignación
             if cam_asignadas == 0:
                 cam_asignadas = info['camareras_base']
             
-            # Calcular tiempo total del sector
             tiempo_total = df_sector['tiempo_estimado'].sum() if 'tiempo_estimado' in df_sector.columns else num_hab * 25
             
             datos_sectores.append({
@@ -423,23 +366,19 @@ if pagina == "📊 Gerente":
         
         df_sectores = pd.DataFrame(datos_sectores)
         
-        # Mostrar métricas por sector en columnas
         col_sect1, col_sect2, col_sect3 = st.columns(3)
-        
         with col_sect1:
             st.markdown("### 🔵 Sector Bajo")
             st.metric("Habitaciones", df_sectores.iloc[0]['Habitaciones'])
             st.metric("Camareras", df_sectores.iloc[0]['Camareras'])
             st.metric("Hab/Cam", df_sectores.iloc[0]['Hab/Cam'])
             st.metric("Tiempo total", f"{df_sectores.iloc[0]['Tiempo total (min)']} min")
-        
         with col_sect2:
             st.markdown("### 🟡 Sector Medio")
             st.metric("Habitaciones", df_sectores.iloc[1]['Habitaciones'])
             st.metric("Camareras", df_sectores.iloc[1]['Camareras'])
             st.metric("Hab/Cam", df_sectores.iloc[1]['Hab/Cam'])
             st.metric("Tiempo total", f"{df_sectores.iloc[1]['Tiempo total (min)']} min")
-        
         with col_sect3:
             st.markdown("### 🔴 Sector Alto")
             st.metric("Habitaciones", df_sectores.iloc[2]['Habitaciones'])
@@ -449,103 +388,45 @@ if pagina == "📊 Gerente":
         
         st.markdown("---")
         
-        # ===== GRÁFICOS DE SECTORES =====
         col_graf_sect1, col_graf_sect2 = st.columns(2)
-        
         with col_graf_sect1:
-            # Gráfico de barras: Habitaciones vs Camareras
             fig = go.Figure()
-            fig.add_trace(go.Bar(
-                name='Habitaciones',
-                x=df_sectores['Sector'],
-                y=df_sectores['Habitaciones'],
-                marker_color=['#1E88E5', '#FFC107', '#DC143C']
-            ))
-            fig.add_trace(go.Bar(
-                name='Camareras',
-                x=df_sectores['Sector'],
-                y=df_sectores['Camareras'],
-                marker_color=['#90CAF9', '#FFE082', '#FF8A80']
-            ))
-            fig.update_layout(
-                title='Habitaciones vs Camareras por Sector',
-                barmode='group',
-                yaxis_title='Cantidad'
-            )
+            fig.add_trace(go.Bar(name='Habitaciones', x=df_sectores['Sector'], y=df_sectores['Habitaciones'],
+                                 marker_color=['#1E88E5', '#FFC107', '#DC143C']))
+            fig.add_trace(go.Bar(name='Camareras', x=df_sectores['Sector'], y=df_sectores['Camareras'],
+                                 marker_color=['#90CAF9', '#FFE082', '#FF8A80']))
+            fig.update_layout(title='Habitaciones vs Camareras por Sector', barmode='group')
             st.plotly_chart(fig, use_container_width=True)
         
         with col_graf_sect2:
-            # Gráfico de carga (tiempo por camarera)
-            fig = px.bar(
-                df_sectores,
-                x='Sector',
-                y='Tiempo/cam (min)',
-                color='Sector',
-                title='Tiempo estimado por camarera (min)',
-                color_discrete_map={
-                    'Bajo (Pl 2-15)': '#1E88E5',
-                    'Medio (Pl 16-30)': '#FFC107',
-                    'Alto (Pl 31-52)': '#DC143C'
-                }
-            )
+            fig = px.bar(df_sectores, x='Sector', y='Tiempo/cam (min)', color='Sector',
+                         title='Tiempo estimado por camarera (min)',
+                         color_discrete_map={'Bajo (Pl 2-15)': '#1E88E5', 'Medio (Pl 16-30)': '#FFC107',
+                                            'Alto (Pl 31-52)': '#DC143C'})
             st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("---")
-        
-        # ===== TABLA DE SECTORES =====
         st.subheader("📋 Detalle por Sector")
-        
-        # Formatear tabla para mejor visualización
-        df_sectores_display = df_sectores.copy()
-        df_sectores_display['Tiempo total (min)'] = df_sectores_display['Tiempo total (min)'].astype(int)
-        df_sectores_display['Tiempo/cam (min)'] = df_sectores_display['Tiempo/cam (min)'].astype(int)
-        
-        st.dataframe(
-            df_sectores_display,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                'Sector': 'Sector',
-                'Habitaciones': '🏨 Habitaciones',
-                'Camareras': '👤 Camareras',
-                'Hab/Cam': '📊 Hab/Cam',
-                'Tiempo total (min)': '⏱️ Tiempo total',
-                'Tiempo/cam (min)': '⏱️ Tiempo/cam'
-            }
-        )
+        st.dataframe(df_sectores, use_container_width=True, hide_index=True)
         
         st.markdown("---")
-        
-        # ===== GRÁFICOS ADICIONALES =====
         st.subheader("📈 Distribución por planta")
         
         col_graf1, col_graf2 = st.columns(2)
-        
         with col_graf1:
             if 'planta' in df.columns:
                 planta_counts = df['planta'].value_counts().sort_index()
-                fig = px.bar(
-                    x=planta_counts.index,
-                    y=planta_counts.values,
-                    labels={'x': 'Planta', 'y': 'Habitaciones'},
-                    title='Habitaciones por planta',
-                    color_discrete_sequence=['#1E88E5']
-                )
-                # Añadir líneas de separación de sectores
+                fig = px.bar(x=planta_counts.index, y=planta_counts.values,
+                             labels={'x': 'Planta', 'y': 'Habitaciones'},
+                             title='Habitaciones por planta')
                 fig.add_vline(x=15.5, line_dash="dash", line_color="gray", annotation_text="Bajo/Medio")
                 fig.add_vline(x=30.5, line_dash="dash", line_color="gray", annotation_text="Medio/Alto")
                 st.plotly_chart(fig, use_container_width=True)
         
         with col_graf2:
             if 'prob_late' in df.columns:
-                fig = px.histogram(
-                    df, 
-                    x='prob_late', 
-                    nbins=20,
-                    title='Distribución de probabilidades Late Checkout',
-                    labels={'prob_late': 'Probabilidad'},
-                    color_discrete_sequence=['#DC143C']
-                )
+                fig = px.histogram(df, x='prob_late', nbins=20,
+                                  title='Distribución de probabilidades Late Checkout')
                 st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("---")
@@ -553,7 +434,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA CON STAND BY
+# VISTA CAMARERA (con Stand By)
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -577,9 +458,7 @@ elif pagina == "🧹 Camarera":
             
             if st.session_state.camarera_actual:
                 st.session_state.habitaciones_completadas = []
-                # Inicializar lista de stand by para esta camarera si no existe
-                if st.session_state.camarera_actual not in st.session_state.standby_por_camarera:
-                    st.session_state.standby_por_camarera[st.session_state.camarera_actual] = []
+                st.session_state.standby = []
                 st.rerun()
         else:
             # Obtener asignación de esta camarera
@@ -588,45 +467,44 @@ elif pagina == "🧹 Camarera":
                 pd.DataFrame()
             )
             
-            # Obtener lista de stand by de esta camarera
-            if st.session_state.camarera_actual not in st.session_state.standby_por_camarera:
-                st.session_state.standby_por_camarera[st.session_state.camarera_actual] = []
-            
-            standby_list = st.session_state.standby_por_camarera[st.session_state.camarera_actual]
-            
-            # Calcular totales
             total_asignadas = len(df_asignadas)
             completadas = len(st.session_state.habitaciones_completadas)
-            pendientes = total_asignadas - completadas - len(standby_list)
+            pendientes = total_asignadas - completadas - len(st.session_state.standby)
             
-            # Mostrar información de la camarera con contador de Stand By
-            col_info1, col_info2, col_info3, col_info4 = st.columns([2, 2, 1, 1])
+            # Mostrar información de la camarera
+            col_info1, col_info2, col_info3 = st.columns([2, 2, 1])
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
             with col_info2:
                 if len(df_asignadas) > 0:
                     plantas_unicas = sorted(df_asignadas['planta'].unique())
-                    # Verificar si son adyacentes
-                    son_adyacentes = all(
-                        plantas_unicas[i+1] - plantas_unicas[i] == 1 
-                        for i in range(len(plantas_unicas)-1)
-                    ) if len(plantas_unicas) > 1 else True
-                    
-                    if son_adyacentes and len(plantas_unicas) > 1:
-                        st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas) ✅")
-                    else:
-                        st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas)")
+                    st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas)")
                 else:
                     st.info("📌 Sin asignación")
             with col_info3:
-                st.metric("⏸️ Stand By", len(standby_list))
-            with col_info4:
                 if st.button("🔄 Cambiar", key="btn_cambiar_usuario_principal"):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
+                    st.session_state.standby = []
                     st.rerun()
             
             st.markdown("---")
+            
+            # ===== STAND BY (ARRIBA A LA DERECHA) =====
+            if st.session_state.standby:
+                with st.expander(f"⏸️ Stand By ({len(st.session_state.standby)} habitaciones)", expanded=True):
+                    for idx, hab_id in enumerate(st.session_state.standby):
+                        col_sb1, col_sb2, col_sb3 = st.columns([2, 1, 1])
+                        with col_sb1:
+                            st.markdown(f"⏸️ **Hab {hab_id}**")
+                        with col_sb2:
+                            st.caption("En espera")
+                        with col_sb3:
+                            if st.button("✅", key=f"sb_completar_{hab_id}_{idx}"):
+                                st.session_state.habitaciones_completadas.append(hab_id)
+                                st.session_state.standby.remove(hab_id)
+                                st.rerun()
+                        st.divider()
             
             # Barra de progreso
             if total_asignadas > 0:
@@ -673,124 +551,67 @@ elif pagina == "🧹 Camarera":
                             time.sleep(1)
                             st.rerun()
                     
-                    # Reportar incidencia o mantenimiento (actualizado con nuevos tipos)
+                    # Reportar problema (sin detener cronómetro para mantenimiento)
                     with st.expander("⚠️ Reportar problema"):
                         tipo_reporte = st.selectbox(
                             "Tipo de problema",
-                            ["Avería (Mantenimiento)", "Falta suministro", "Muy sucia", "Ocupada", "Otro"],
+                            ["Avería (Mantenimiento)", "Falta suministros", "Muy sucia", "Ocupada", "Otro"],
                             key="tipo_reporte_cron"
                         )
                         desc_reporte = st.text_area("Descripción", key="desc_reporte_cron")
-                        if st.button("Enviar reporte", key="btn_reporte_cron", use_container_width=True):
-                            hab_id = hab['habitacion_id']
-                            
-                            # Avería va a Mantenimiento
-                            if tipo_reporte == "Avería (Mantenimiento)":
-                                st.session_state.mantenimiento.append({
-                                    'habitacion': int(hab_id),
-                                    'planta': int(hab['planta']),
-                                    'tipo': "Avería",
-                                    'descripcion': desc_reporte,
-                                    'timestamp': datetime.now().strftime("%H:%M"),
-                                    'fecha': datetime.now().strftime("%d/%m/%Y"),
-                                    'reportado_por': st.session_state.camarera_actual
-                                })
-                                st.success("🔧 Reporte enviado a Mantenimiento")
-                                # No se mueve a completadas ni a stand by
-                            
-                            # Estos tipos van a Stand By
-                            elif tipo_reporte in ["Falta suministro", "Muy sucia", "Ocupada"]:
-                                # Añadir a la lista de stand by
-                                if hab_id not in standby_list:
-                                    standby_list.append(hab_id)
-                                    st.session_state.standby_por_camarera[st.session_state.camarera_actual] = standby_list
+                        
+                        col_rep1, col_rep2 = st.columns(2)
+                        with col_rep1:
+                            if st.button("Reportar y continuar", key="btn_reporte_continuar", use_container_width=True):
+                                hab_id = hab['habitacion_id']
                                 
-                                # Reportar como incidencia
-                                st.session_state.incidencias.append({
-                                    'habitacion': int(hab_id),
-                                    'planta': int(hab['planta']),
-                                    'tipo': tipo_reporte,
-                                    'descripcion': desc_reporte,
-                                    'timestamp': datetime.now().strftime("%H:%M"),
-                                    'fecha': datetime.now().strftime("%d/%m/%Y"),
-                                    'reportado_por': st.session_state.camarera_actual
-                                })
-                                st.warning(f"⏸️ Habitación {int(hab_id)} movida a Stand By")
-                            
-                            # Otro también va a Incidencias pero no a stand by
-                            else:  # Otro
-                                st.session_state.incidencias.append({
-                                    'habitacion': int(hab_id),
-                                    'planta': int(hab['planta']),
-                                    'tipo': tipo_reporte,
-                                    'descripcion': desc_reporte,
-                                    'timestamp': datetime.now().strftime("%H:%M"),
-                                    'fecha': datetime.now().strftime("%d/%m/%Y"),
-                                    'reportado_por': st.session_state.camarera_actual
-                                })
-                                st.success("⚠️ Incidencia reportada")
-                            
-                            # Reiniciar cronómetro
-                            st.session_state.cronometro_activo = False
-                            st.session_state.habitacion_actual = None
-                            time.sleep(1)
-                            st.rerun()
-                    
-                    st.markdown("---")
-            
-            # ===== SECCIÓN 2: STAND BY (si hay) =====
-            if standby_list:
-                with st.container():
-                    st.subheader(f"⏸️ Stand By ({len(standby_list)})")
-                    st.caption("Habitaciones pendientes por problemas (Falta suministro, Muy sucia, Ocupada)")
-                    
-                    # Obtener datos de las habitaciones en stand by
-                    df_standby = df_asignadas[df_asignadas['habitacion_id'].isin(standby_list)].copy()
-                    
-                    for i, (_, row) in enumerate(df_standby.iterrows()):
-                        with st.container():
-                            cols = st.columns([3, 2, 2, 3])
-                            
-                            with cols[0]:
-                                st.markdown(f"⏸️ **Hab {int(row['habitacion_id'])}**")
-                                st.caption(f"Planta {int(row['planta'])}")
-                            
-                            with cols[1]:
-                                if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
-                                    st.markdown("🏃 **Late**")
+                                if tipo_reporte == "Avería (Mantenimiento)":
+                                    st.session_state.mantenimiento.append({
+                                        'habitacion': int(hab_id),
+                                        'planta': int(hab['planta']),
+                                        'tipo': "Avería",
+                                        'descripcion': desc_reporte,
+                                        'timestamp': datetime.now().strftime("%H:%M"),
+                                        'fecha': datetime.now().strftime("%d/%m/%Y"),
+                                        'reportado_por': st.session_state.camarera_actual
+                                    })
+                                    st.success("🔧 Reporte enviado a Mantenimiento (puedes seguir limpiando)")
+                                    st.rerun()
                                 else:
-                                    st.markdown("🛏️ **Normal**")
-                            
-                            with cols[2]:
-                                if 'tiempo_estimado' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
-                            
-                            with cols[3]:
-                                # Botón para marcar como completada desde stand by
-                                if st.button(
-                                    f"✅ Completar", 
-                                    key=f"btn_completar_standby_{row['habitacion_id']}_{i}",
-                                    use_container_width=True
-                                ):
-                                    # Quitar de stand by
-                                    standby_list.remove(row['habitacion_id'])
-                                    st.session_state.standby_por_camarera[st.session_state.camarera_actual] = standby_list
+                                    # Para estos casos, la habitación va a Stand By
+                                    if hab_id not in st.session_state.standby:
+                                        st.session_state.standby.append(hab_id)
                                     
-                                    # Añadir a completadas
-                                    st.session_state.habitaciones_completadas.append(row['habitacion_id'])
+                                    # Registrar incidencia
+                                    st.session_state.incidencias.append({
+                                        'habitacion': int(hab_id),
+                                        'planta': int(hab['planta']),
+                                        'tipo': tipo_reporte,
+                                        'descripcion': desc_reporte,
+                                        'timestamp': datetime.now().strftime("%H:%M"),
+                                        'fecha': datetime.now().strftime("%d/%m/%Y"),
+                                        'reportado_por': st.session_state.camarera_actual
+                                    })
+                                    st.warning(f"⏸️ Habitación {hab_id} movida a Stand By")
                                     
-                                    st.success(f"✅ Habitación {int(row['habitacion_id'])} completada")
+                                    # Terminar esta limpieza (la habitación no se completa)
+                                    st.session_state.cronometro_activo = False
+                                    st.session_state.habitacion_actual = None
                                     time.sleep(1)
                                     st.rerun()
-                            
-                            st.divider()
+                        
+                        with col_rep2:
+                            if st.button("Cancelar", key="btn_reporte_cancelar", use_container_width=True):
+                                st.rerun()
+                    
                     st.markdown("---")
             
-            # ===== SECCIÓN 3: HABITACIONES PENDIENTES =====
+            # ===== SECCIÓN 2: HABITACIONES PENDIENTES =====
             if total_asignadas > 0:
-                # Excluir completadas y stand by
+                # Excluir completadas y standby
                 df_pendientes = df_asignadas[
-                    ~df_asignadas['habitacion_id'].isin(st.session_state.habitaciones_completadas + standby_list)
+                    ~df_asignadas['habitacion_id'].isin(st.session_state.habitaciones_completadas) &
+                    ~df_asignadas['habitacion_id'].isin(st.session_state.standby)
                 ].copy()
                 
                 if 'late_checkout_pred' in df_pendientes.columns:
@@ -801,11 +622,10 @@ elif pagina == "🧹 Camarera":
                 
                 st.markdown(f"### Pendientes ({pendientes} restantes)")
                 
-                if pendientes == 0 and not standby_list:
+                if pendientes == 0:
                     st.success("🎉 ¡Has completado todas tus habitaciones!")
                     st.balloons()
-                elif pendientes > 0:
-                    # Usar un contador para generar keys únicos
+                else:
                     for i, (_, row) in enumerate(df_pendientes.iterrows()):
                         with st.container():
                             cols = st.columns([3, 2, 2, 3])
@@ -829,20 +649,12 @@ elif pagina == "🧹 Camarera":
                                     st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
                             
                             with cols[3]:
-                                # Botón deshabilitado si hay limpieza en curso
                                 if st.session_state.cronometro_activo:
-                                    st.button(
-                                        f"⏸️ En curso", 
-                                        key=f"btn_disabled_{row['habitacion_id']}_{i}",
-                                        disabled=True,
-                                        use_container_width=True
-                                    )
+                                    st.button("⏸️ En curso", key=f"btn_disabled_{row['habitacion_id']}_{i}",
+                                             disabled=True, use_container_width=True)
                                 else:
-                                    if st.button(
-                                        f"▶️ Iniciar", 
-                                        key=f"btn_iniciar_{row['habitacion_id']}_{i}",
-                                        use_container_width=True
-                                    ):
+                                    if st.button("▶️ Iniciar", key=f"btn_iniciar_{row['habitacion_id']}_{i}",
+                                                use_container_width=True):
                                         st.session_state.habitacion_actual = row
                                         st.session_state.cronometro_activo = True
                                         st.session_state.tiempo_inicio = datetime.now()
@@ -850,7 +662,7 @@ elif pagina == "🧹 Camarera":
                             
                             st.divider()
             
-            # ===== SECCIÓN 4: HABITACIONES COMPLETADAS =====
+            # ===== SECCIÓN 3: HABITACIONES COMPLETADAS =====
             if completadas > 0:
                 st.markdown("---")
                 st.subheader(f"✅ Completadas ({completadas}/{total_asignadas})")
@@ -870,10 +682,7 @@ elif pagina == "🧹 Camarera":
                             st.caption(f"Planta {int(row['planta'])}")
                         
                         with cols[1]:
-                            if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
-                                st.markdown("~~Late~~")
-                            else:
-                                st.markdown("~~Normal~~")
+                            st.markdown("~~" + ("🏃 Late" if row.get('late_checkout_pred') == 1 else "🛏️ Normal") + "~~")
                         
                         with cols[2]:
                             if 'tiempo_estimado' in row:
@@ -888,12 +697,12 @@ elif pagina == "🧹 Camarera":
                         st.divider()
 
 # =============================================================================
-# VISTA INCIDENCIAS (Falta suministro, Muy sucia, Ocupada, Otro)
+# VISTA INCIDENCIAS (operativas)
 # =============================================================================
 
 elif pagina == "⚠️ Incidencias":
     st.title("⚠️ Panel de Incidencias Operativas")
-    st.caption("Problemas de: Falta suministro, Muy sucia, Ocupada, Otro")
+    st.caption("Problemas: Falta suministros, Muy sucia, Ocupada, Otro")
     
     if st.session_state.incidencias:
         for inc in reversed(st.session_state.incidencias):
@@ -914,7 +723,7 @@ elif pagina == "⚠️ Incidencias":
         st.info("✅ No hay incidencias operativas registradas")
 
 # =============================================================================
-# VISTA MANTENIMIENTO (Averías técnicas)
+# VISTA MANTENIMIENTO (averías técnicas)
 # =============================================================================
 
 elif pagina == "🔧 Mantenimiento":
@@ -938,23 +747,6 @@ elif pagina == "🔧 Mantenimiento":
                 st.divider()
     else:
         st.info("✅ No hay averías de mantenimiento registradas")
-    
-    # Estadísticas de mantenimiento
-    if st.session_state.mantenimiento:
-        st.markdown("---")
-        st.subheader("📊 Estadísticas de Mantenimiento")
-        
-        # Contar por tipo
-        tipos = {}
-        for inc in st.session_state.mantenimiento:
-            tipo = inc['tipo']
-            tipos[tipo] = tipos.get(tipo, 0) + 1
-        
-        col_mant1, col_mant2 = st.columns(2)
-        with col_mant1:
-            st.metric("Total averías", len(st.session_state.mantenimiento))
-        with col_mant2:
-            st.metric("Pendientes", len(st.session_state.mantenimiento))
 
 # =============================================================================
 # VISTA DATASET
