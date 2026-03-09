@@ -373,7 +373,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CON MODELOS
+# VISTA CAMARERA - CON MODELOS Y CONTADOR DE PROGRESO
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -416,6 +416,11 @@ elif pagina == "🧹 Camarera":
                     else:
                         st.warning("No hay habitaciones disponibles")
                         st.session_state.asignacion_actual = pd.DataFrame()
+            
+            # Calcular total de habitaciones asignadas
+            total_asignadas = len(st.session_state.asignacion_actual)
+            completadas = len(st.session_state.habitaciones_completadas)
+            pendientes = total_asignadas - completadas
             
             # Mostrar información de la camarera
             col_info1, col_info2, col_info3 = st.columns(3)
@@ -509,7 +514,7 @@ elif pagina == "🧹 Camarera":
                     st.markdown("---")
             
             # ===== SECCIÓN 2: HABITACIONES PENDIENTES =====
-            if len(st.session_state.asignacion_actual) > 0:
+            if total_asignadas > 0:
                 # Excluir completadas
                 df_pendientes = st.session_state.asignacion_actual[
                     ~st.session_state.asignacion_actual['habitacion_id'].isin(
@@ -524,9 +529,17 @@ elif pagina == "🧹 Camarera":
                         ascending=[False, False]
                     )
                 
-                st.subheader(f"📋 Pendientes ({len(df_pendientes)} restantes)")
+                # Mostrar progreso con barra y contador
+                st.subheader(f"📋 Progreso del día")
                 
-                if len(df_pendientes) == 0:
+                # Barra de progreso
+                progreso_total = completadas / total_asignadas if total_asignadas > 0 else 0
+                st.progress(progreso_total, text=f"**{completadas}/{total_asignadas}** habitaciones completadas")
+                
+                # Subtítulo con pendientes restantes
+                st.markdown(f"### Pendientes ({pendientes} restantes)")
+                
+                if pendientes == 0:
                     st.success("🎉 ¡Has completado todas tus habitaciones!")
                     st.balloons()
                 else:
@@ -570,9 +583,9 @@ elif pagina == "🧹 Camarera":
                             st.divider()
             
             # ===== SECCIÓN 3: HABITACIONES COMPLETADAS =====
-            if st.session_state.habitaciones_completadas:
+            if completadas > 0:
                 st.markdown("---")
-                st.subheader(f"✅ Completadas hoy ({len(st.session_state.habitaciones_completadas)})")
+                st.subheader(f"✅ Completadas ({completadas}/{total_asignadas})")
                 
                 df_completadas = df[df['habitacion_id'].isin(
                     st.session_state.habitaciones_completadas
