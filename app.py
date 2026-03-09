@@ -532,7 +532,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CON BLOQUES ADYACENTES
+# VISTA CAMARERA - CORREGIDA (SIN ERRORES DE BOTONES)
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -550,7 +550,8 @@ elif pagina == "🧹 Camarera":
                 "Nombre:",
                 camareras,
                 index=None,
-                placeholder="Elige tu nombre..."
+                placeholder="Elige tu nombre...",
+                key="select_camarera"
             )
             
             if st.session_state.camarera_actual:
@@ -567,7 +568,7 @@ elif pagina == "🧹 Camarera":
             completadas = len(st.session_state.habitaciones_completadas)
             pendientes = total_asignadas - completadas
             
-            # Mostrar información
+            # Mostrar información de la camarera
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
@@ -578,15 +579,16 @@ elif pagina == "🧹 Camarera":
                     son_adyacentes = all(
                         plantas_unicas[i+1] - plantas_unicas[i] == 1 
                         for i in range(len(plantas_unicas)-1)
-                    )
-                    if son_adyacentes:
+                    ) if len(plantas_unicas) > 1 else True
+                    
+                    if son_adyacentes and len(plantas_unicas) > 1:
                         st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas) ✅")
                     else:
                         st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas)")
                 else:
                     st.info("📌 Sin asignación")
             with col_info3:
-                if st.button("🔄 Cambiar usuario"):
+                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario"):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
                     st.rerun()
@@ -594,10 +596,11 @@ elif pagina == "🧹 Camarera":
             st.markdown("---")
             
             # Barra de progreso
-            progreso_total = completadas / total_asignadas if total_asignadas > 0 else 0
-            st.progress(progreso_total, text=f"**{completadas}/{total_asignadas}** habitaciones completadas")
+            if total_asignadas > 0:
+                progreso_total = completadas / total_asignadas
+                st.progress(progreso_total, text=f"**{completadas}/{total_asignadas}** habitaciones completadas")
             
-            # SECCIÓN 1: LIMPIEZA EN CURSO
+            # ===== SECCIÓN 1: LIMPIEZA EN CURSO =====
             if st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None:
                 with st.container():
                     st.subheader("⏱️ Limpieza en curso")
@@ -612,13 +615,15 @@ elif pagina == "🧹 Camarera":
                     
                     with col_crono2:
                         tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
-                        st.markdown(f"**Tiempo:** {formatear_tiempo(tiempo_transcurrido)}")
+                        minutos = tiempo_transcurrido // 60
+                        segundos = tiempo_transcurrido % 60
+                        st.markdown(f"**Tiempo:** {minutos}:{segundos:02d}")
                         if 'tiempo_estimado' in hab:
                             progreso = min(tiempo_transcurrido / (hab['tiempo_estimado'] * 60), 1.0)
                             st.progress(progreso)
                     
                     with col_crono3:
-                        if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True):
+                        if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True, key="btn_finalizar"):
                             tiempo_real = (datetime.now() - st.session_state.tiempo_inicio).seconds / 60
                             
                             df = st.session_state.df_pms
@@ -635,6 +640,7 @@ elif pagina == "🧹 Camarera":
                             time.sleep(1)
                             st.rerun()
                     
+                    # Reportar incidencia
                     with st.expander("⚠️ Reportar incidencia"):
                         tipo_inc = st.selectbox(
                             "Tipo",
@@ -661,7 +667,7 @@ elif pagina == "🧹 Camarera":
                     
                     st.markdown("---")
             
-            # SECCIÓN 2: PENDIENTES
+            # ===== SECCIÓN 2: HABITACIONES PENDIENTES =====
             if total_asignadas > 0:
                 df_pendientes = df_asignadas[
                     ~df_asignadas['habitacion_id'].isin(st.session_state.habitaciones_completadas)
@@ -679,7 +685,7 @@ elif pagina == "🧹 Camarera":
                     st.success("🎉 ¡Has completado todas tus habitaciones!")
                     st.balloons()
                 else:
-                    for idx, row in df_pendientes.iterrows():
+                    for idx, (_, row) in enumerate(df_pendientes.iterrows()):
                         with st.container():
                             cols = st.columns([3, 2, 2, 3])
                             
@@ -703,9 +709,11 @@ elif pagina == "🧹 Camarera":
                             
                             with cols[3]:
                                 disabled = st.session_state.cronometro_activo
+                                # Usar un key único basado en habitación para evitar duplicados
+                                btn_key = f"btn_iniciar_{row['habitacion_id']}_{idx}"
                                 if st.button(
                                     f"▶️ Iniciar", 
-                                    key=f"btn_{idx}_{row['habitacion_id']}", 
+                                    key=btn_key, 
                                     disabled=disabled,
                                     use_container_width=True
                                 ):
@@ -716,7 +724,7 @@ elif pagina == "🧹 Camarera":
                             
                             st.divider()
             
-            # SECCIÓN 3: COMPLETADAS
+            # ===== SECCIÓN 3: HABITACIONES COMPLETADAS =====
             if completadas > 0:
                 st.markdown("---")
                 st.subheader(f"✅ Completadas ({completadas}/{total_asignadas})")
@@ -727,7 +735,7 @@ elif pagina == "🧹 Camarera":
                     )
                 ]
                 
-                for idx, row in df_completadas.iterrows():
+                for idx, (_, row) in enumerate(df_completadas.iterrows()):
                     with st.container():
                         cols = st.columns([3, 2, 2, 3])
                         
