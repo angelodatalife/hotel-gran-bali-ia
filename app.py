@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con asignación equitativa basada en modelos
+# Versión con asignación por BLOQUES ADYACENTES
 # =============================================================================
 
 import streamlit as st
@@ -108,53 +108,33 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
-def asignacion_equitativa(df, total_camareras=35):
+def asignar_por_bloques_adyacentes(df, total_camareras=35):
     """
-    Asigna habitaciones de forma equitativa usando:
-    - K-Means para agrupar plantas
-    - XGBoost para estimar tiempo y equilibrar carga
-    - ANN para priorizar urgentes
+    Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES
+    - Divide las plantas en bloques consecutivos
+    - Usa K-Means para priorizar urgentes dentro del bloque
+    - Equilibra carga por tiempo estimado
     """
     if df is None or len(df) == 0:
         return {}
     
     df_asignar = df.copy()
+    plantas_totales = sorted(df_asignar['planta'].unique())
     
-    # 1. Obtener cluster de cada planta usando K-Means
-    if modelos.get('kmeans') is not None:
-        kmeans_model = modelos['kmeans']['modelo']
-        scaler = modelos['kmeans']['scaler']
-        features = modelos['kmeans']['features']
-        
-        # Crear perfil por planta
-        plantas_unicas = sorted(df_asignar['planta'].unique())
-        planta_a_cluster = {}
-        
-        for planta in plantas_unicas:
-            df_planta = df_asignar[df_asignar['planta'] == planta]
-            perfil = {
-                'planta': planta,
-                'tiempo_promedio': df_planta['tiempo_estimado'].mean() if 'tiempo_estimado' in df_planta.columns else 30,
-                'tasa_late_checkout': df_planta['late_checkout_pred'].mean() if 'late_checkout_pred' in df_planta.columns else 0.3,
-                'noches_promedio': df_planta['noches_estancia'].mean() if 'noches_estancia' in df_planta.columns else 3,
-                'huespedes_promedio': df_planta['num_huespedes'].mean() if 'num_huespedes' in df_planta.columns else 2,
-                'tasa_ninos': df_planta['tiene_ninos'].mean() if 'tiene_ninos' in df_planta.columns else 0.2,
-                'sector_num': 0 if planta <= 15 else (1 if planta <= 30 else 2),
-                'num_habitaciones': len(df_planta)
-            }
-            perfil_df = pd.DataFrame([perfil])
-            X_perfil = perfil_df[features].values
-            X_scaled = scaler.transform(X_perfil)
-            planta_a_cluster[planta] = kmeans_model.predict(X_scaled)[0]
-        
-        df_asignar['cluster'] = df_asignar['planta'].map(planta_a_cluster)
-    else:
-        # Fallback: usar sector como cluster
-        df_asignar['cluster'] = df_asignar['planta'].apply(
-            lambda x: 0 if x <= 15 else (1 if x <= 30 else 2)
-        )
+    # 1. Calcular carga por planta (tiempo estimado total)
+    carga_por_planta = {}
+    for planta in plantas_totales:
+        df_planta = df_asignar[df_asignar['planta'] == planta]
+        if 'tiempo_estimado' in df_planta.columns:
+            carga_por_planta[planta] = df_planta['tiempo_estimado'].sum()
+        else:
+            carga_por_planta[planta] = len(df_planta) * 25  # estimado
     
-    # 2. Aplicar ANN para predecir late checkout
+    # 2. Calcular carga total y carga ideal por camarera
+    carga_total = sum(carga_por_planta.values())
+    carga_ideal_por_cam = carga_total / total_camareras
+    
+    # 3. Aplicar ANN para priorizar urgentes
     if modelos.get('ann') is not None:
         try:
             ann_model = modelos['ann']['modelo']
@@ -176,72 +156,104 @@ def asignacion_equitativa(df, total_camareras=35):
     else:
         df_asignar['late_checkout_pred'] = 0
     
-    # 3. Agrupar por cluster y asignar equitativamente
-    clusters = sorted(df_asignar['cluster'].unique())
-    habitaciones_por_cluster = {
-        cluster: df_asignar[df_asignar['cluster'] == cluster].copy()
-        for cluster in clusters
-    }
+    # 4. Crear BLOQUES DE PLANTAS ADYACENTES
+    bloques = []
+    bloque_actual = []
+    carga_acumulada = 0
     
-    # Calcular tiempo total por cluster
-    tiempo_por_cluster = {}
-    for cluster, df_cluster in habitaciones_por_cluster.items():
-        if 'tiempo_estimado' in df_cluster.columns:
-            tiempo_por_cluster[cluster] = df_cluster['tiempo_estimado'].sum()
-        else:
-            tiempo_por_cluster[cluster] = len(df_cluster) * 25  # estimado
+    for planta in plantas_totales:
+        bloque_actual.append(planta)
+        carga_acumulada += carga_por_planta[planta]
+        
+        # Si alcanzamos o superamos la carga ideal, cerramos el bloque
+        if carga_acumulada >= carga_ideal_por_cam * 0.8:  # 80% de la carga ideal
+            bloques.append({
+                'plantas': bloque_actual.copy(),
+                'carga': carga_acumulada
+            })
+            bloque_actual = []
+            carga_acumulada = 0
     
-    # Calcular tiempo total y asignar camareras proporcionalmente
-    tiempo_total = sum(tiempo_por_cluster.values())
+    # Añadir el último bloque si quedó algo
+    if bloque_actual:
+        bloques.append({
+            'plantas': bloque_actual,
+            'carga': carga_acumulada
+        })
     
-    # Distribución de camareras por cluster (proporcional al tiempo)
-    camareras_por_cluster = {}
-    for cluster, tiempo in tiempo_por_cluster.items():
-        # Mínimo 1 camarera por cluster
-        num_cam = max(1, round((tiempo / tiempo_total) * total_camareras))
-        camareras_por_cluster[cluster] = num_cam
-    
-    # Ajustar para que sume 35
-    total_asignado = sum(camareras_por_cluster.values())
-    if total_asignado > total_camareras:
-        # Reducir del cluster con más tiempo
-        cluster_max = max(camareras_por_cluster, key=camareras_por_cluster.get)
-        camareras_por_cluster[cluster_max] -= (total_asignado - total_camareras)
-    elif total_asignado < total_camareras:
-        # Añadir al cluster con más tiempo
-        cluster_max = max(camareras_por_cluster, key=camareras_por_cluster.get)
-        camareras_por_cluster[cluster_max] += (total_camareras - total_asignado)
-    
-    # Asignar habitaciones a cada camarera
+    # 5. Asignar camareras a bloques (1-2 camareras por bloque según carga)
     asignacion = {}
     cam_idx = 1
     
-    for cluster, num_cam in camareras_por_cluster.items():
-        df_cluster = habitaciones_por_cluster[cluster].copy()
+    for bloque in bloques:
+        plantas_bloque = bloque['plantas']
+        carga_bloque = bloque['carga']
         
-        # Ordenar por prioridad (late checkout)
-        df_cluster = df_cluster.sort_values(
+        # Calcular cuántas camareras necesita este bloque
+        num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
+        
+        # Obtener habitaciones de estas plantas
+        df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
+        
+        # Ordenar por prioridad
+        df_bloque = df_bloque.sort_values(
             by=['late_checkout_pred', 'habitacion_id'], 
             ascending=[False, True]
         )
         
-        # Dividir habitaciones entre las camareras del cluster
-        habitaciones_por_cam = len(df_cluster) // num_cam
-        resto = len(df_cluster) % num_cam
+        # Dividir habitaciones entre las camareras del bloque
+        if num_cam_bloque > 1:
+            # Dividir equitativamente
+            habs_por_cam = len(df_bloque) // num_cam_bloque
+            resto = len(df_bloque) % num_cam_bloque
+            
+            inicio = 0
+            for i in range(num_cam_bloque):
+                if cam_idx > total_camareras:
+                    break
+                
+                fin = inicio + habs_por_cam + (1 if i < resto else 0)
+                df_cam = df_bloque.iloc[inicio:fin].copy()
+                
+                if len(df_cam) > 0:
+                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam
+                
+                inicio = fin
+                cam_idx += 1
+        else:
+            # Una sola camarera para todo el bloque
+            if cam_idx <= total_camareras:
+                asignacion[f"Camarera {cam_idx:02d}"] = df_bloque
+                cam_idx += 1
+    
+    # 6. Distribuir camareras restantes si no se llegó a 35
+    if cam_idx <= total_camareras:
+        # Buscar bloques con más carga y subdividir
+        bloques_ordenados = sorted(bloques, key=lambda x: x['carga'], reverse=True)
         
-        inicio = 0
-        for i in range(num_cam):
+        for bloque in bloques_ordenados:
             if cam_idx > total_camareras:
                 break
             
-            fin = inicio + habitaciones_por_cam + (1 if i < resto else 0)
-            df_cam = df_cluster.iloc[inicio:fin].copy()
+            plantas_bloque = bloque['plantas']
+            df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
             
-            if len(df_cam) > 0:
-                asignacion[f"Camarera {cam_idx:02d}"] = df_cam
+            # Verificar cuántas camareras ya tienen este bloque
+            cam_en_bloque = [cam for cam, df_cam in asignacion.items() 
+                            if set(df_cam['planta'].unique()) & set(plantas_bloque)]
             
-            inicio = fin
-            cam_idx += 1
+            if len(cam_en_bloque) < 3:  # Máximo 3 camareras por bloque
+                # Dividir el bloque en dos
+                mitad = len(df_bloque) // 2
+                df_cam1 = df_bloque.iloc[:mitad].copy()
+                df_cam2 = df_bloque.iloc[mitad:].copy()
+                
+                if len(df_cam1) > 0 and cam_idx <= total_camareras:
+                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam1
+                    cam_idx += 1
+                if len(df_cam2) > 0 and cam_idx <= total_camareras:
+                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam2
+                    cam_idx += 1
     
     return asignacion
 
@@ -320,9 +332,9 @@ if pagina == "📊 Gerente":
                 
                 st.session_state.df_pms = df
                 
-                # Hacer asignación equitativa
-                with st.spinner("Calculando asignación equitativa..."):
-                    st.session_state.asignacion_por_camarera = asignacion_equitativa(df)
+                # Hacer asignación por bloques adyacentes
+                with st.spinner("Calculando asignación por bloques adyacentes..."):
+                    st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(df)
                 
                 st.success(f"✅ PMS cargado: {len(df)} habitaciones | 35 camareras asignadas")
                 st.rerun()
@@ -349,16 +361,32 @@ if pagina == "📊 Gerente":
         df = st.session_state.df_pms
         st.markdown("---")
         
-        st.subheader("📈 Distribución de carga")
+        st.subheader("📈 Distribución por bloques adyacentes")
         
         if st.session_state.asignacion_por_camarera:
+            # Mostrar resumen de bloques
+            bloques_resumen = {}
+            for cam, df_cam in st.session_state.asignacion_por_camarera.items():
+                plantas = sorted(df_cam['planta'].unique())
+                if len(plantas) > 0:
+                    bloque_key = f"{min(plantas)}-{max(plantas)}"
+                    if bloque_key not in bloques_resumen:
+                        bloques_resumen[bloque_key] = []
+                    bloques_resumen[bloque_key].append(cam)
+            
+            st.markdown("**Bloques de trabajo:**")
+            for bloque, cams in bloques_resumen.items():
+                st.markdown(f"- Plantas {bloque}: {len(cams)} camareras")
+            
+            # Gráficos de carga
             datos_carga = []
             for cam, df_cam in st.session_state.asignacion_por_camarera.items():
                 tiempo = df_cam['tiempo_estimado'].sum() if 'tiempo_estimado' in df_cam.columns else len(df_cam) * 25
                 datos_carga.append({
                     'Camarera': cam,
                     'Habitaciones': len(df_cam),
-                    'Tiempo (min)': round(tiempo, 1)
+                    'Tiempo (min)': round(tiempo, 1),
+                    'Plantas': f"{int(df_cam['planta'].min())}-{int(df_cam['planta'].max())}"
                 })
             
             df_carga = pd.DataFrame(datos_carga)
@@ -370,6 +398,7 @@ if pagina == "📊 Gerente":
                     df_carga, 
                     x='Camarera', 
                     y='Habitaciones',
+                    color='Plantas',
                     title='Habitaciones por camarera'
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -379,27 +408,17 @@ if pagina == "📊 Gerente":
                     df_carga, 
                     x='Camarera', 
                     y='Tiempo (min)',
+                    color='Plantas',
                     title='Tiempo estimado por camarera'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("---")
-            st.subheader("📊 Estadísticas de carga")
-            
-            col_est1, col_est2, col_est3 = st.columns(3)
-            with col_est1:
-                st.metric("Media hab/cam", f"{df_carga['Habitaciones'].mean():.1f}")
-            with col_est2:
-                st.metric("Min hab", int(df_carga['Habitaciones'].min()))
-            with col_est3:
-                st.metric("Max hab", int(df_carga['Habitaciones'].max()))
         
         st.markdown("---")
         st.subheader("📋 Detalle de habitaciones")
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CON ASIGNACIÓN EQUITATIVA
+# VISTA CAMARERA - CON BLOQUES ADYACENTES
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -441,7 +460,15 @@ elif pagina == "🧹 Camarera":
             with col_info2:
                 if len(df_asignadas) > 0:
                     plantas_unicas = sorted(df_asignadas['planta'].unique())
-                    st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas)")
+                    # Verificar si son adyacentes
+                    son_adyacentes = all(
+                        plantas_unicas[i+1] - plantas_unicas[i] == 1 
+                        for i in range(len(plantas_unicas)-1)
+                    )
+                    if son_adyacentes:
+                        st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas) ✅")
+                    else:
+                        st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas)")
                 else:
                     st.info("📌 Sin asignación")
             with col_info3:
@@ -451,6 +478,10 @@ elif pagina == "🧹 Camarera":
                     st.rerun()
             
             st.markdown("---")
+            
+            # Barra de progreso
+            progreso_total = completadas / total_asignadas if total_asignadas > 0 else 0
+            st.progress(progreso_total, text=f"**{completadas}/{total_asignadas}** habitaciones completadas")
             
             # SECCIÓN 1: LIMPIEZA EN CURSO
             if st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None:
@@ -527,10 +558,6 @@ elif pagina == "🧹 Camarera":
                         by=['late_checkout_pred', 'habitacion_id'], 
                         ascending=[False, False]
                     )
-                
-                # Barra de progreso
-                progreso_total = completadas / total_asignadas if total_asignadas > 0 else 0
-                st.progress(progreso_total, text=f"**{completadas}/{total_asignadas}** habitaciones completadas")
                 
                 st.markdown(f"### Pendientes ({pendientes} restantes)")
                 
