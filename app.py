@@ -212,29 +212,41 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
     return asignacion
 
 # =============================================================================
-# SIDEBAR - NAVEGACIÓN (IZQUIERDA)
+# SIDEBAR - NAVEGACIÓN (IZQUIERDA) - CORREGIDO
 # =============================================================================
 
 with st.sidebar:
     st.title("🏨 Hotel Gran Bali")
     st.markdown("---")
     
-    # Menú principal con contadores
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        selected = st.radio(
-            "**Menú Principal**",
-            ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "🔧 Mantenimiento", "📋 Dataset"],
-            key="main_menu"
-        )
-    with col2:
-        st.markdown("###")
-        if st.session_state.incidencias:
-            st.markdown(f"**({len(st.session_state.incidencias)})**")
-    with col3:
-        st.markdown("###")
-        if st.session_state.mantenimiento:
-            st.markdown(f"**({len(st.session_state.mantenimiento)})**")
+    # Menú principal con contadores en la misma línea
+    opciones_menu = ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "🔧 Mantenimiento", "📋 Dataset"]
+    
+    # Crear layout para el menú
+    for opcion in opciones_menu:
+        cols = st.columns([3, 1, 1])
+        with cols[0]:
+            if opcion == "⚠️ Incidencias":
+                selected = st.radio(
+                    "**Menú Principal**",
+                    opciones_menu,
+                    key="main_menu",
+                    label_visibility="collapsed"
+                )
+            else:
+                # Para las otras opciones, solo mostramos el texto sin radio
+                if opcion == selected if 'selected' in locals() else False:
+                    st.markdown(f"**→ {opcion}**")
+                else:
+                    st.markdown(opcion)
+        
+        # Contadores para Incidencias y Mantenimiento
+        with cols[1]:
+            if opcion == "⚠️ Incidencias" and st.session_state.incidencias:
+                st.markdown(f"**({len(st.session_state.incidencias)})**")
+        with cols[2]:
+            if opcion == "🔧 Mantenimiento" and st.session_state.mantenimiento:
+                st.markdown(f"**({len(st.session_state.mantenimiento)})**")
     
     st.markdown("---")
     
