@@ -212,58 +212,79 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
     return asignacion
 
 # =============================================================================
-# SIDEBAR - NAVEGACIÓN (IZQUIERDA) - CORREGIDO
+# SIDEBAR - NAVEGACIÓN (IZQUIERDA)
 # =============================================================================
 
 with st.sidebar:
     st.title("🏨 Hotel Gran Bali")
     st.markdown("---")
     
-    # Menú principal con contadores en la misma línea
+    # Menú principal con contadores alineados
     st.markdown("**Menú Principal**")
     
     # Gerente
-    col1, col2 = st.columns([4, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
-        if st.button("📊 Gerente", key="btn_gerente", use_container_width=True):
-            st.session_state.main_menu = "📊 Gerente"
+        gerente_selected = st.button("📊 Gerente", key="btn_gerente", use_container_width=True)
     with col2:
-        st.markdown(" ")  # Espacio vacío
+        st.markdown("")  # Espacio vacío
+    with col3:
+        st.markdown("")  # Espacio vacío
     
     # Camarera
-    if st.button("🧹 Camarera", key="btn_camarera", use_container_width=True):
-        st.session_state.main_menu = "🧹 Camarera"
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        camarera_selected = st.button("🧹 Camarera", key="btn_camarera", use_container_width=True)
+    with col2:
+        st.markdown("")
+    with col3:
+        st.markdown("")
     
     # Incidencias con contador
-    col_inc1, col_inc2 = st.columns([4, 1])
-    with col_inc1:
-        if st.button("⚠️ Incidencias", key="btn_incidencias", use_container_width=True):
-            st.session_state.main_menu = "⚠️ Incidencias"
-    with col_inc2:
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        incidencias_selected = st.button("⚠️ Incidencias", key="btn_incidencias", use_container_width=True)
+    with col2:
         if st.session_state.incidencias:
             st.markdown(f"**({len(st.session_state.incidencias)})**")
-        else:
-            st.markdown(" ")
+    with col3:
+        st.markdown("")
     
     # Mantenimiento con contador
-    col_mant1, col_mant2 = st.columns([4, 1])
-    with col_mant1:
-        if st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True):
-            st.session_state.main_menu = "🔧 Mantenimiento"
-    with col_mant2:
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        mantenimiento_selected = st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True)
+    with col2:
         if st.session_state.mantenimiento:
             st.markdown(f"**({len(st.session_state.mantenimiento)})**")
-        else:
-            st.markdown(" ")
+    with col3:
+        st.markdown("")
     
     # Dataset
-    if st.button("📋 Dataset", key="btn_dataset", use_container_width=True):
-        st.session_state.main_menu = "📋 Dataset"
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        dataset_selected = st.button("📋 Dataset", key="btn_dataset", use_container_width=True)
+    with col2:
+        st.markdown("")
+    with col3:
+        st.markdown("")
     
-    # Obtener la página seleccionada
-    if 'main_menu' not in st.session_state:
-        st.session_state.main_menu = "📊 Gerente"
-    selected = st.session_state.main_menu
+    # Determinar la página seleccionada
+    if 'selected_page' not in st.session_state:
+        st.session_state.selected_page = "📊 Gerente"
+    
+    if gerente_selected:
+        st.session_state.selected_page = "📊 Gerente"
+    elif camarera_selected:
+        st.session_state.selected_page = "🧹 Camarera"
+    elif incidencias_selected:
+        st.session_state.selected_page = "⚠️ Incidencias"
+    elif mantenimiento_selected:
+        st.session_state.selected_page = "🔧 Mantenimiento"
+    elif dataset_selected:
+        st.session_state.selected_page = "📋 Dataset"
+    
+    selected = st.session_state.selected_page
     
     st.markdown("---")
     
@@ -322,7 +343,7 @@ with st.sidebar:
     if st.button("🔄 Reiniciar Simulación", use_container_width=True):
         for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                     'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
-                    'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 'main_menu']:
+                    'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby']:
             if key in st.session_state:
                 if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'habitaciones_standby']:
                     st.session_state[key] = []
