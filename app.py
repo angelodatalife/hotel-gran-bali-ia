@@ -243,7 +243,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CORREGIDA
+# VISTA CAMARERA - ASIGNACIÓN POR CLÚSTERES COMPACTOS
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -267,26 +267,78 @@ elif pagina == "🧹 Camarera":
             if st.session_state.camarera_actual:
                 st.rerun()
         else:
-            # Información de la camarera
+            # Obtener número de camarera
+            num_cam = int(st.session_state.camarera_actual.split()[1])
+            
+            # DEFINIR CLÚSTERES DE PLANTAS (compactos, adyacentes)
+            # Cada clúster tiene 2-3 plantas consecutivas
+            clusteres_plantas = {
+                # Sector Bajo (19 camareras) - plantas 2-15
+                1: [2, 3, 4],      # Camareras 1-3
+                2: [5, 6],         # Camareras 4-5
+                3: [7, 8, 9],      # Camareras 6-8
+                4: [10, 11],       # Camareras 9-10
+                5: [12, 13],       # Camareras 11-12
+                6: [14, 15],       # Camareras 13-14
+                
+                # Sector Medio (11 camareras) - plantas 16-30
+                7: [16, 17, 18],   # Camareras 15-17
+                8: [19, 20, 21],   # Camareras 18-20
+                9: [22, 23, 24],   # Camareras 21-23
+                10: [25, 26],      # Camareras 24-25
+                11: [27, 28, 29, 30], # Camareras 26-29
+                
+                # Sector Alto (5 camareras) - plantas 31-52
+                12: [31, 32, 33, 34, 35],  # Camarera 30
+                13: [36, 37, 38, 39, 40],  # Camarera 31
+                14: [41, 42, 43, 44, 45],  # Camarera 32
+                15: [46, 47, 48, 49, 50],  # Camarera 33
+                16: [51, 52],               # Camarera 34
+            }
+            
+            # Asignar clúster según número de camarera
+            if num_cam <= 3:
+                cluster = 1
+            elif num_cam <= 5:
+                cluster = 2
+            elif num_cam <= 8:
+                cluster = 3
+            elif num_cam <= 10:
+                cluster = 4
+            elif num_cam <= 12:
+                cluster = 5
+            elif num_cam <= 14:
+                cluster = 6
+            elif num_cam <= 17:
+                cluster = 7
+            elif num_cam <= 20:
+                cluster = 8
+            elif num_cam <= 23:
+                cluster = 9
+            elif num_cam <= 25:
+                cluster = 10
+            elif num_cam <= 29:
+                cluster = 11
+            elif num_cam == 30:
+                cluster = 12
+            elif num_cam == 31:
+                cluster = 13
+            elif num_cam == 32:
+                cluster = 14
+            elif num_cam == 33:
+                cluster = 15
+            else:
+                cluster = 16
+            
+            plantas_asignadas = clusteres_plantas[cluster]
+            sector = 'Bajo' if cluster <= 6 else ('Medio' if cluster <= 11 else 'Alto')
+            
+            # Mostrar información
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
             with col_info2:
-                # Asignar sector basado en el índice de la camarera
-                num_cam = int(st.session_state.camarera_actual.split()[1])
-                
-                # Distribución real de camareras por sector
-                if num_cam <= 19:
-                    sector = 'Bajo'
-                    plantas_asignadas = list(range(2, 16))
-                elif num_cam <= 30:
-                    sector = 'Medio'
-                    plantas_asignadas = list(range(16, 31))
-                else:
-                    sector = 'Alto'
-                    plantas_asignadas = list(range(31, 53))
-                
-                st.info(f"📌 Sector: {sector}")
+                st.info(f"📌 Plantas: {min(plantas_asignadas)}-{max(plantas_asignadas)} ({sector})")
             with col_info3:
                 if st.button("🔄 Cambiar usuario"):
                     st.session_state.camarera_actual = None
@@ -294,43 +346,55 @@ elif pagina == "🧹 Camarera":
             
             st.markdown("---")
             
-            # Filtrar habitaciones del sector correspondiente
-            df_sector = df[df['planta'].isin(plantas_asignadas)].copy()
+            # Filtrar habitaciones de sus plantas asignadas
+            df_asignadas = df[df['planta'].isin(plantas_asignadas)].copy()
             
-            # Si no hay suficientes en su sector, tomar las más cercanas
-            if len(df_sector) < 5:
-                # Tomar las plantas más cercanas al sector
-                plantas_cercanas = []
-                if sector == 'Bajo':
-                    plantas_cercanas = list(range(16, 21))  # Las primeras del Medio
-                elif sector == 'Medio':
-                    # Mitad Bajo, mitad Alto
-                    plantas_cercanas = list(range(12, 16)) + list(range(31, 36))
-                else:  # Alto
-                    plantas_cercanas = list(range(26, 31))  # Las últimas del Medio
+            # Si no hay suficientes en sus plantas, tomar las más cercanas
+            if len(df_asignadas) < 4:
+                # Buscar plantas adyacentes al clúster
+                todas_plantas = sorted(set(df['planta']))
+                idx_actual = todas_plantas.index(min(plantas_asignadas))
                 
-                df_cercanas = df[df['planta'].isin(plantas_cercanas)]
-                df_sector = pd.concat([df_sector, df_cercanas]).drop_duplicates()
+                plantas_extra = []
+                # Añadir plantas anteriores si existen
+                if idx_actual > 0:
+                    plantas_extra.append(todas_plantas[idx_actual - 1])
+                # Añadir plantas posteriores si existen
+                if idx_actual + len(plantas_asignadas) < len(todas_plantas):
+                    plantas_extra.append(todas_plantas[idx_actual + len(plantas_asignadas)])
+                
+                df_extra = df[df['planta'].isin(plantas_extra)]
+                df_asignadas = pd.concat([df_asignadas, df_extra]).drop_duplicates()
             
-            # Seleccionar máximo 8 habitaciones para la camarera
-            if len(df_sector) > 8:
-                # Priorizar las de su sector, luego las más cercanas
-                df_sector = df_sector.head(8)
+            # Limitar a máximo 8 habitaciones
+            if len(df_asignadas) > 8:
+                # Priorizar urgentes
+                if 'clase_checkout' in df_asignadas.columns:
+                    urgentes = df_asignadas[df_asignadas['clase_checkout'] == 'Salida']
+                    no_urgentes = df_asignadas[df_asignadas['clase_checkout'] != 'Salida']
+                    
+                    # Tomar todas las urgentes (máx 4) y completar con no urgentes
+                    urgentes = urgentes.head(4)
+                    restantes = 8 - len(urgentes)
+                    no_urgentes = no_urgentes.head(restantes)
+                    df_asignadas = pd.concat([urgentes, no_urgentes])
+                else:
+                    df_asignadas = df_asignadas.head(8)
             
-            # Ordenar: primero urgentes (Salida), luego por número de habitación descendente
-            if 'clase_checkout' in df_sector.columns:
-                df_sector['es_urgente'] = (df_sector['clase_checkout'] == 'Salida').astype(int)
-                df_sector = df_sector.sort_values(
+            # Ordenar: urgentes primero, luego por número descendente
+            if 'clase_checkout' in df_asignadas.columns:
+                df_asignadas['es_urgente'] = (df_asignadas['clase_checkout'] == 'Salida').astype(int)
+                df_asignadas = df_asignadas.sort_values(
                     by=['es_urgente', 'habitacion_id'], 
                     ascending=[False, False]
                 ).drop('es_urgente', axis=1)
             else:
-                df_sector = df_sector.sort_values('habitacion_id', ascending=False)
+                df_asignadas = df_asignadas.sort_values('habitacion_id', ascending=False)
             
-            st.subheader("📋 Mis habitaciones hoy")
+            st.subheader(f"📋 Mis habitaciones hoy (Plantas {min(plantas_asignadas)}-{max(plantas_asignadas)})")
             
             # Mostrar lista de habitaciones
-            for idx, row in df_sector.iterrows():
+            for idx, row in df_asignadas.iterrows():
                 with st.container():
                     cols = st.columns([3, 2, 2, 3])
                     
