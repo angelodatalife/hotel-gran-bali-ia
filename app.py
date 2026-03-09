@@ -532,7 +532,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CORREGIDA (SIN ERRORES DE BOTONES)
+# VISTA CAMARERA - VERSIÓN CORREGIDA (SIN ERRORES)
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -551,7 +551,7 @@ elif pagina == "🧹 Camarera":
                 camareras,
                 index=None,
                 placeholder="Elige tu nombre...",
-                key="select_camarera"
+                key="select_camarera_principal"
             )
             
             if st.session_state.camarera_actual:
@@ -588,7 +588,7 @@ elif pagina == "🧹 Camarera":
                 else:
                     st.info("📌 Sin asignación")
             with col_info3:
-                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario"):
+                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal"):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
                     st.rerun()
@@ -623,7 +623,7 @@ elif pagina == "🧹 Camarera":
                             st.progress(progreso)
                     
                     with col_crono3:
-                        if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True, key="btn_finalizar"):
+                        if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True, key="btn_finalizar_principal"):
                             tiempo_real = (datetime.now() - st.session_state.tiempo_inicio).seconds / 60
                             
                             df = st.session_state.df_pms
@@ -645,10 +645,10 @@ elif pagina == "🧹 Camarera":
                         tipo_inc = st.selectbox(
                             "Tipo",
                             ["Avería", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"],
-                            key="tipo_inc_cron"
+                            key="tipo_inc_cron_principal"
                         )
-                        desc_inc = st.text_area("Descripción", key="desc_inc_cron")
-                        if st.button("Enviar", key="btn_inc_cron", use_container_width=True):
+                        desc_inc = st.text_area("Descripción", key="desc_inc_cron_principal")
+                        if st.button("Enviar", key="btn_inc_cron_principal", use_container_width=True):
                             st.session_state.incidencias.append({
                                 'habitacion': int(hab['habitacion_id']),
                                 'planta': int(hab['planta']),
@@ -685,7 +685,8 @@ elif pagina == "🧹 Camarera":
                     st.success("🎉 ¡Has completado todas tus habitaciones!")
                     st.balloons()
                 else:
-                    for idx, (_, row) in enumerate(df_pendientes.iterrows()):
+                    # Usar un contador para generar keys únicos
+                    for i, (_, row) in enumerate(df_pendientes.iterrows()):
                         with st.container():
                             cols = st.columns([3, 2, 2, 3])
                             
@@ -708,19 +709,24 @@ elif pagina == "🧹 Camarera":
                                     st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
                             
                             with cols[3]:
-                                disabled = st.session_state.cronometro_activo
-                                # Usar un key único basado en habitación para evitar duplicados
-                                btn_key = f"btn_iniciar_{row['habitacion_id']}_{idx}"
-                                if st.button(
-                                    f"▶️ Iniciar", 
-                                    key=btn_key, 
-                                    disabled=disabled,
-                                    use_container_width=True
-                                ):
-                                    st.session_state.habitacion_actual = row
-                                    st.session_state.cronometro_activo = True
-                                    st.session_state.tiempo_inicio = datetime.now()
-                                    st.rerun()
+                                # Botón deshabilitado si hay limpieza en curso
+                                if st.session_state.cronometro_activo:
+                                    st.button(
+                                        f"⏸️ En curso", 
+                                        key=f"btn_disabled_{row['habitacion_id']}_{i}",
+                                        disabled=True,
+                                        use_container_width=True
+                                    )
+                                else:
+                                    if st.button(
+                                        f"▶️ Iniciar", 
+                                        key=f"btn_iniciar_{row['habitacion_id']}_{i}",
+                                        use_container_width=True
+                                    ):
+                                        st.session_state.habitacion_actual = row
+                                        st.session_state.cronometro_activo = True
+                                        st.session_state.tiempo_inicio = datetime.now()
+                                        st.rerun()
                             
                             st.divider()
             
@@ -735,7 +741,7 @@ elif pagina == "🧹 Camarera":
                     )
                 ]
                 
-                for idx, (_, row) in enumerate(df_completadas.iterrows()):
+                for i, (_, row) in enumerate(df_completadas.iterrows()):
                     with st.container():
                         cols = st.columns([3, 2, 2, 3])
                         
