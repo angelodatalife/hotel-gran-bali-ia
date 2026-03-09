@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con asignación por BLOQUES ADYACENTES
+# Versión con Incidencias y Mantenimiento separados
 # =============================================================================
 
 import streamlit as st
@@ -62,7 +62,9 @@ modelos = cargar_modelos()
 if 'df_pms' not in st.session_state:
     st.session_state.df_pms = None
 if 'incidencias' not in st.session_state:
-    st.session_state.incidencias = []
+    st.session_state.incidencias = []  # Problemas operativos
+if 'mantenimiento' not in st.session_state:
+    st.session_state.mantenimiento = []  # Averías técnicas
 if 'opiniones' not in st.session_state:
     st.session_state.opiniones = []
 if 'camarera_actual' not in st.session_state:
@@ -268,7 +270,7 @@ with st.sidebar:
     
     pagina = st.radio(
         "**Menú Principal**",
-        ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "📋 Dataset"]
+        ["📊 Gerente", "🧹 Camarera", "⚠️ Incidencias", "🔧 Mantenimiento", "📋 Dataset"]
     )
     
     st.markdown("---")
@@ -285,18 +287,18 @@ with st.sidebar:
         """)
     
     if st.button("🔄 Reiniciar Simulación", use_container_width=True):
-        for key in ['df_pms', 'incidencias', 'opiniones', 'camarera_actual', 
+        for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                     'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                     'asignacion_por_camarera', 'habitaciones_completadas']:
             if key in st.session_state:
-                if key in ['incidencias', 'opiniones', 'habitaciones_completadas']:
+                if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas']:
                     st.session_state[key] = []
                 else:
                     st.session_state[key] = None
         st.rerun()
 
 # =============================================================================
-# VISTA GERENTE - CON SECTORES Y CAMARERAS
+# VISTA GERENTE
 # =============================================================================
 
 if pagina == "📊 Gerente":
@@ -306,7 +308,7 @@ if pagina == "📊 Gerente":
     
     with col1:
         st.subheader("📂 Cargar PMS del día")
-        archivo = st.file_uploader("Selecciona archivo CSV", type=['csv'])
+        archivo = st.file_uploader("Selecciona archivo CSV", type=['csv'], key="file_uploader_gerente")
         
         if archivo is not None and st.session_state.df_pms is None:
             with st.spinner("Procesando archivo..."):
@@ -495,7 +497,7 @@ if pagina == "📊 Gerente":
         
         st.markdown("---")
         
-        # ===== GRÁFICOS ADICIONALES (los que ya tenías) =====
+        # ===== GRÁFICOS ADICIONALES =====
         st.subheader("📈 Distribución por planta")
         
         col_graf1, col_graf2 = st.columns(2)
@@ -532,7 +534,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - VERSIÓN CORREGIDA (SIN ERRORES)
+# VISTA CAMARERA
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -640,25 +642,40 @@ elif pagina == "🧹 Camarera":
                             time.sleep(1)
                             st.rerun()
                     
-                    # Reportar incidencia
-                    with st.expander("⚠️ Reportar incidencia"):
-                        tipo_inc = st.selectbox(
-                            "Tipo",
-                            ["Avería", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"],
-                            key="tipo_inc_cron_principal"
+                    # Reportar incidencia o mantenimiento
+                    with st.expander("⚠️ Reportar problema"):
+                        tipo_reporte = st.selectbox(
+                            "Tipo de problema",
+                            ["Avería (Mantenimiento)", "Falta suministros", "Habitación sucia", "Cliente presente", "Otro"],
+                            key="tipo_reporte_cron"
                         )
-                        desc_inc = st.text_area("Descripción", key="desc_inc_cron_principal")
-                        if st.button("Enviar", key="btn_inc_cron_principal", use_container_width=True):
-                            st.session_state.incidencias.append({
-                                'habitacion': int(hab['habitacion_id']),
-                                'planta': int(hab['planta']),
-                                'tipo': tipo_inc,
-                                'descripcion': desc_inc,
-                                'timestamp': datetime.now().strftime("%H:%M"),
-                                'fecha': datetime.now().strftime("%d/%m/%Y")
-                            })
-                            st.success("✅ Incidencia reportada")
+                        desc_reporte = st.text_area("Descripción", key="desc_reporte_cron")
+                        if st.button("Enviar reporte", key="btn_reporte_cron", use_container_width=True):
+                            # Separar según el tipo
+                            if tipo_reporte == "Avería (Mantenimiento)":
+                                st.session_state.mantenimiento.append({
+                                    'habitacion': int(hab['habitacion_id']),
+                                    'planta': int(hab['planta']),
+                                    'tipo': "Avería",
+                                    'descripcion': desc_reporte,
+                                    'timestamp': datetime.now().strftime("%H:%M"),
+                                    'fecha': datetime.now().strftime("%d/%m/%Y"),
+                                    'reportado_por': st.session_state.camarera_actual
+                                })
+                                st.success("🔧 Reporte enviado a Mantenimiento")
+                            else:
+                                st.session_state.incidencias.append({
+                                    'habitacion': int(hab['habitacion_id']),
+                                    'planta': int(hab['planta']),
+                                    'tipo': tipo_reporte,
+                                    'descripcion': desc_reporte,
+                                    'timestamp': datetime.now().strftime("%H:%M"),
+                                    'fecha': datetime.now().strftime("%d/%m/%Y"),
+                                    'reportado_por': st.session_state.camarera_actual
+                                })
+                                st.success("⚠️ Incidencia reportada")
                             
+                            # Mover a completadas
                             st.session_state.habitaciones_completadas.append(hab['habitacion_id'])
                             st.session_state.cronometro_activo = False
                             st.session_state.habitacion_actual = None
@@ -768,54 +785,77 @@ elif pagina == "🧹 Camarera":
                         st.divider()
 
 # =============================================================================
-# VISTA INCIDENCIAS Y DATASET (se mantienen igual)
+# VISTA INCIDENCIAS (operativas)
 # =============================================================================
 
 elif pagina == "⚠️ Incidencias":
-    st.title("⚠️ Panel de Incidencias - Hotel Gran Bali")
+    st.title("⚠️ Panel de Incidencias Operativas")
+    st.caption("Problemas de suministros, limpieza, clientes, etc.")
     
-    tab1, tab2 = st.tabs(["📋 Incidencias activas", "📝 Registrar opinión"])
+    if st.session_state.incidencias:
+        for inc in reversed(st.session_state.incidencias):
+            with st.container():
+                col_inc1, col_inc2 = st.columns([3, 1])
+                with col_inc1:
+                    st.warning(f"**{inc['timestamp']} - {inc['fecha']}**")
+                    st.markdown(f"**Habitación {inc['habitacion']}** (Planta {inc['planta']})")
+                    st.markdown(f"**{inc['tipo']}:** {inc['descripcion']}")
+                    if 'reportado_por' in inc:
+                        st.caption(f"👤 {inc['reportado_por']}")
+                with col_inc2:
+                    if st.button("✓ Resolver", key=f"resolver_inc_{inc['habitacion']}_{inc['timestamp']}"):
+                        st.session_state.incidencias.remove(inc)
+                        st.rerun()
+                st.divider()
+    else:
+        st.info("✅ No hay incidencias operativas registradas")
+
+# =============================================================================
+# VISTA MANTENIMIENTO (averías técnicas)
+# =============================================================================
+
+elif pagina == "🔧 Mantenimiento":
+    st.title("🔧 Panel de Mantenimiento")
+    st.caption("Averías técnicas (fontanería, electricidad, etc.)")
     
-    with tab1:
-        if st.session_state.incidencias:
-            for inc in reversed(st.session_state.incidencias):
-                with st.container():
-                    col_inc1, col_inc2 = st.columns([3, 1])
-                    with col_inc1:
-                        st.warning(f"**{inc['timestamp']} - {inc['fecha']}**")
-                        st.markdown(f"**Habitación {inc['habitacion']}** (Planta {inc['planta']})")
-                        st.markdown(f"**{inc['tipo']}:** {inc['descripcion']}")
-                    with col_inc2:
-                        if st.button("✓ Resolver", key=f"resolver_{inc['habitacion']}_{inc['timestamp']}"):
-                            st.session_state.incidencias.remove(inc)
-                            st.rerun()
-                    st.divider()
-        else:
-            st.info("✅ No hay incidencias registradas")
+    if st.session_state.mantenimiento:
+        for inc in reversed(st.session_state.mantenimiento):
+            with st.container():
+                col_inc1, col_inc2 = st.columns([3, 1])
+                with col_inc1:
+                    st.error(f"🔧 **{inc['timestamp']} - {inc['fecha']}**")
+                    st.markdown(f"**Habitación {inc['habitacion']}** (Planta {inc['planta']})")
+                    st.markdown(f"**{inc['tipo']}:** {inc['descripcion']}")
+                    if 'reportado_por' in inc:
+                        st.caption(f"👤 {inc['reportado_por']}")
+                with col_inc2:
+                    if st.button("✓ Reparado", key=f"resolver_mant_{inc['habitacion']}_{inc['timestamp']}"):
+                        st.session_state.mantenimiento.remove(inc)
+                        st.rerun()
+                st.divider()
+    else:
+        st.info("✅ No hay averías de mantenimiento registradas")
     
-    with tab2:
-        st.subheader("📝 Registrar opinión de cliente")
-        with st.form("form_opinion"):
-            col_form1, col_form2 = st.columns(2)
-            with col_form1:
-                hab_id = st.number_input("N° habitación", min_value=100, max_value=5299, value=1205, step=1)
-            with col_form2:
-                st.caption(f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-            
-            opinion_text = st.text_area("Opinión", placeholder="Ej: La habitación estaba muy limpia...", height=100)
-            submitted = st.form_submit_button("📤 Registrar", use_container_width=True)
-            
-            if submitted and opinion_text:
-                sentimiento = procesar_opinion(opinion_text)
-                st.session_state.opiniones.append({
-                    'habitacion': hab_id,
-                    'opinion': opinion_text,
-                    'sentimiento': sentimiento,
-                    'timestamp': datetime.now().strftime("%H:%M"),
-                    'fecha': datetime.now().strftime("%d/%m/%Y")
-                })
-                st.success(f"✅ Opinión registrada - Sentimiento: **{sentimiento}**")
-                st.rerun()
+    # Estadísticas de mantenimiento
+    if st.session_state.mantenimiento:
+        st.markdown("---")
+        st.subheader("📊 Estadísticas de Mantenimiento")
+        
+        # Contar por tipo
+        tipos = {}
+        for inc in st.session_state.mantenimiento:
+            tipo = inc['tipo']
+            tipos[tipo] = tipos.get(tipo, 0) + 1
+        
+        col_mant1, col_mant2 = st.columns(2)
+        with col_mant1:
+            st.metric("Total averías", len(st.session_state.mantenimiento))
+        with col_mant2:
+            st.metric("Pendientes", len(st.session_state.mantenimiento))
+
+# =============================================================================
+# VISTA DATASET
+# =============================================================================
 
 elif pagina == "📋 Dataset":
     st.title("📋 Dataset Enriquecido")
@@ -841,8 +881,7 @@ elif pagina == "📋 Dataset":
         with col_met3:
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_met4:
-            if 'late_checkout_pred' in df.columns:
-                st.metric("Late checkout", int(df['late_checkout_pred'].sum()))
+            st.metric("Mantenimiento", len(st.session_state.mantenimiento))
         
         st.subheader("📋 Datos completos")
         st.dataframe(df, use_container_width=True, height=500)
