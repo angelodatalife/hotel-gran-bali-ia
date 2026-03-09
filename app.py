@@ -243,7 +243,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA
+# VISTA CAMARERA - CORREGIDA
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -267,15 +267,26 @@ elif pagina == "🧹 Camarera":
             if st.session_state.camarera_actual:
                 st.rerun()
         else:
+            # Información de la camarera
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
             with col_info2:
-                import hashlib
-                hash_val = int(hashlib.md5(st.session_state.camarera_actual.encode()).hexdigest(), 16)
-                sector_idx = hash_val % 3
-                sectores = ['Bajo (Pl 2-15)', 'Medio (Pl 16-30)', 'Alto (Pl 31-52)']
-                st.info(f"📌 Sector: {sectores[sector_idx]}")
+                # Asignar sector basado en el índice de la camarera
+                num_cam = int(st.session_state.camarera_actual.split()[1])
+                
+                # Distribución real de camareras por sector
+                if num_cam <= 19:
+                    sector = 'Bajo'
+                    plantas_asignadas = list(range(2, 16))
+                elif num_cam <= 30:
+                    sector = 'Medio'
+                    plantas_asignadas = list(range(16, 31))
+                else:
+                    sector = 'Alto'
+                    plantas_asignadas = list(range(31, 53))
+                
+                st.info(f"📌 Sector: {sector}")
             with col_info3:
                 if st.button("🔄 Cambiar usuario"):
                     st.session_state.camarera_actual = None
@@ -283,13 +294,43 @@ elif pagina == "🧹 Camarera":
             
             st.markdown("---")
             
-            np.random.seed(hash(f"{st.session_state.camarera_actual}_{datetime.now().day}") % 2**32)
-            indices = np.random.choice(len(df), size=min(8, len(df)), replace=False)
-            habitaciones_asignadas = df.iloc[indices].copy()
+            # Filtrar habitaciones del sector correspondiente
+            df_sector = df[df['planta'].isin(plantas_asignadas)].copy()
+            
+            # Si no hay suficientes en su sector, tomar las más cercanas
+            if len(df_sector) < 5:
+                # Tomar las plantas más cercanas al sector
+                plantas_cercanas = []
+                if sector == 'Bajo':
+                    plantas_cercanas = list(range(16, 21))  # Las primeras del Medio
+                elif sector == 'Medio':
+                    # Mitad Bajo, mitad Alto
+                    plantas_cercanas = list(range(12, 16)) + list(range(31, 36))
+                else:  # Alto
+                    plantas_cercanas = list(range(26, 31))  # Las últimas del Medio
+                
+                df_cercanas = df[df['planta'].isin(plantas_cercanas)]
+                df_sector = pd.concat([df_sector, df_cercanas]).drop_duplicates()
+            
+            # Seleccionar máximo 8 habitaciones para la camarera
+            if len(df_sector) > 8:
+                # Priorizar las de su sector, luego las más cercanas
+                df_sector = df_sector.head(8)
+            
+            # Ordenar: primero urgentes (Salida), luego por número de habitación descendente
+            if 'clase_checkout' in df_sector.columns:
+                df_sector['es_urgente'] = (df_sector['clase_checkout'] == 'Salida').astype(int)
+                df_sector = df_sector.sort_values(
+                    by=['es_urgente', 'habitacion_id'], 
+                    ascending=[False, False]
+                ).drop('es_urgente', axis=1)
+            else:
+                df_sector = df_sector.sort_values('habitacion_id', ascending=False)
             
             st.subheader("📋 Mis habitaciones hoy")
             
-            for idx, row in habitaciones_asignadas.iterrows():
+            # Mostrar lista de habitaciones
+            for idx, row in df_sector.iterrows():
                 with st.container():
                     cols = st.columns([3, 2, 2, 3])
                     
