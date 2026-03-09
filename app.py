@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión para Streamlit Cloud
+# Versión con asignación basada en modelos entrenados
 # =============================================================================
 
 import streamlit as st
@@ -11,8 +11,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import re
-import os
 import time
+import os
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -41,6 +41,7 @@ def cargar_modelos():
     }
     
     # Verificar que los archivos existen
+    archivos_faltantes = []
     for nombre, archivo in archivos_modelos.items():
         if os.path.exists(archivo):
             try:
@@ -50,8 +51,11 @@ def cargar_modelos():
                 st.warning(f"⚠️ No se pudo cargar {nombre}: {str(e)}")
                 modelos[nombre] = None
         else:
-            st.warning(f"⚠️ Archivo no encontrado: {archivo}")
+            archivos_faltantes.append(archivo)
             modelos[nombre] = None
+    
+    if archivos_faltantes:
+        st.warning(f"⚠️ Archivos no encontrados: {', '.join(archivos_faltantes)}")
     
     return modelos
 
@@ -77,6 +81,10 @@ if 'tiempo_inicio' not in st.session_state:
     st.session_state.tiempo_inicio = None
 if 'habitacion_actual' not in st.session_state:
     st.session_state.habitacion_actual = None
+if 'asignacion_actual' not in st.session_state:
+    st.session_state.asignacion_actual = None
+if 'habitaciones_completadas' not in st.session_state:
+    st.session_state.habitaciones_completadas = []
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -111,6 +119,104 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
+def asignar_habitaciones_por_modelos(df, num_cam, total_camaras=35):
+    """
+    Asigna habitaciones a una camarera usando los modelos entrenados:
+    - K-Means: determina el clúster de plantas de la camarera
+    - ANN: prioriza habitaciones con late checkout
+    - XGBoost: estima tiempo para equilibrar carga
+    """
+    if modelos.get('kmeans') is None:
+        # Fallback a asignación por sectores si no hay modelo
+        if num_cam <= 19:
+            plantas_base = list(range(2, 16))
+        elif num_cam <= 30:
+            plantas_base = list(range(16, 31))
+        else:
+            plantas_base = list(range(31, 53))
+        return df[df['planta'].isin(plantas_base)].copy()
+    
+    # 1. Obtener cluster de la camarera usando K-Means
+    kmeans_model = modelos['kmeans']['modelo']
+    scaler = modelos['kmeans']['scaler']
+    features = modelos['kmeans']['features']
+    
+    # Crear perfil promedio de las plantas del sector de la camarera
+    if num_cam <= 19:
+        plantas_sector = list(range(2, 16))
+    elif num_cam <= 30:
+        plantas_sector = list(range(16, 31))
+    else:
+        plantas_sector = list(range(31, 53))
+    
+    # Calcular estadísticas promedio del sector
+    df_sector = df[df['planta'].isin(plantas_sector)]
+    if len(df_sector) == 0:
+        return pd.DataFrame()
+    
+    perfil_sector = {
+        'planta': np.mean(plantas_sector),
+        'tiempo_promedio': df_sector['tiempo_estimado'].mean() if 'tiempo_estimado' in df_sector.columns else 30,
+        'tasa_late_checkout': df_sector['late_checkout_pred'].mean() if 'late_checkout_pred' in df_sector.columns else 0.3,
+        'noches_promedio': df_sector['noches_estancia'].mean() if 'noches_estancia' in df_sector.columns else 3,
+        'huespedes_promedio': df_sector['num_huespedes'].mean() if 'num_huespedes' in df_sector.columns else 2,
+        'tasa_ninos': df_sector['tiene_ninos'].mean() if 'tiene_ninos' in df_sector.columns else 0.2,
+        'sector_num': 0 if num_cam <= 19 else (1 if num_cam <= 30 else 2),
+        'num_habitaciones': len(plantas_sector)
+    }
+    
+    # Escalar y predecir cluster
+    perfil_df = pd.DataFrame([perfil_sector])
+    X_perfil = perfil_df[features].values
+    X_scaled = scaler.transform(X_perfil)
+    cluster_cam = kmeans_model.predict(X_scaled)[0]
+    
+    # Obtener plantas del mismo cluster
+    if 'df_planta_stats' in modelos['kmeans']:
+        df_stats = pd.DataFrame(modelos['kmeans']['df_planta_stats'])
+        plantas_cluster = df_stats[df_stats['cluster'] == cluster_cam]['planta'].tolist()
+    else:
+        # Fallback: plantas del sector
+        plantas_cluster = plantas_sector
+    
+    # 2. Filtrar habitaciones del cluster
+    df_candidatas = df[df['planta'].isin(plantas_cluster)].copy()
+    
+    # 3. Aplicar ANN para priorizar urgentes (late checkout)
+    if modelos.get('ann') is not None and 'late_checkout_pred' not in df_candidatas.columns:
+        try:
+            ann_model = modelos['ann']['modelo']
+            scaler_ann = modelos['ann']['scaler']
+            feature_cols = modelos['ann']['feature_cols']
+            
+            # Preparar features para ANN
+            X_ann = df_candidatas[feature_cols].values
+            X_ann_scaled = scaler_ann.transform(X_ann)
+            
+            # Predecir probabilidad de late checkout
+            prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
+            df_candidatas['prob_late'] = prob_late
+            df_candidatas['late_checkout_pred'] = (prob_late > 0.5).astype(int)
+        except Exception as e:
+            df_candidatas['late_checkout_pred'] = 0
+            df_candidatas['prob_late'] = 0
+    
+    # 4. Aplicar XGBoost para estimar tiempos (si es necesario)
+    if modelos.get('xgboost') is not None and 'tiempo_estimado' in df_candidatas.columns:
+        # Ya tenemos tiempo_estimado del CSV
+        pass
+    
+    # 5. Ordenar por prioridad (late checkout primero)
+    if 'late_checkout_pred' in df_candidatas.columns:
+        df_candidatas = df_candidatas.sort_values(
+            by=['late_checkout_pred', 'habitacion_id'], 
+            ascending=[False, False]
+        )
+    else:
+        df_candidatas = df_candidatas.sort_values('habitacion_id', ascending=False)
+    
+    return df_candidatas
+
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN
 # =============================================================================
@@ -140,11 +246,10 @@ with st.sidebar:
     
     if st.button("🔄 Reiniciar Simulación", use_container_width=True):
         for key in ['df_pms', 'incidencias', 'opiniones', 'camarera_actual', 
-                    'cronometro_activo', 'tiempo_inicio', 'habitacion_actual']:
+                    'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
+                    'asignacion_actual', 'habitaciones_completadas']:
             if key in st.session_state:
-                if key == 'incidencias':
-                    st.session_state[key] = []
-                elif key == 'opiniones':
+                if key == 'incidencias' or key == 'opiniones' or key == 'habitaciones_completadas':
                     st.session_state[key] = []
                 else:
                     st.session_state[key] = None
@@ -169,6 +274,26 @@ if pagina == "📊 Gerente":
         if archivo is not None and st.session_state.df_pms is None:
             with st.spinner("Procesando archivo..."):
                 df = pd.read_csv(archivo)
+                
+                # Aplicar ANN para predecir late checkout si es posible
+                if modelos.get('ann') is not None:
+                    try:
+                        ann_model = modelos['ann']['modelo']
+                        scaler_ann = modelos['ann']['scaler']
+                        feature_cols = modelos['ann']['feature_cols']
+                        
+                        # Verificar que todas las columnas necesarias existen
+                        cols_disponibles = [c for c in feature_cols if c in df.columns]
+                        if len(cols_disponibles) == len(feature_cols):
+                            X_ann = df[feature_cols].values
+                            X_ann_scaled = scaler_ann.transform(X_ann)
+                            
+                            prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
+                            df['prob_late'] = prob_late
+                            df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
+                    except Exception as e:
+                        st.warning(f"⚠️ No se pudo aplicar ANN: {str(e)}")
+                
                 st.session_state.df_pms = df
                 st.success(f"✅ PMS cargado correctamente: {len(df)} habitaciones")
                 st.rerun()
@@ -182,10 +307,14 @@ if pagina == "📊 Gerente":
             with col_metric1:
                 st.metric("Habitaciones", len(df))
             with col_metric2:
-                checkouts = len(df[df['clase_checkout'] == 'Salida']) if 'clase_checkout' in df.columns else 0
-                st.metric("Checkouts", checkouts)
+                if 'late_checkout_pred' in df.columns:
+                    checkouts = df['late_checkout_pred'].sum()
+                    st.metric("Late checkout", int(checkouts))
+                else:
+                    checkouts = len(df[df['clase_checkout'] == 'Salida']) if 'clase_checkout' in df.columns else 0
+                    st.metric("Checkouts", checkouts)
             with col_metric3:
-                repasos = len(df[df['clase_checkout'] == 'Repaso']) if 'clase_checkout' in df.columns else 0
+                repasos = len(df) - checkouts if 'late_checkout_pred' in df.columns else 0
                 st.metric("Repasos", repasos)
     
     if st.session_state.df_pms is not None:
@@ -228,13 +357,14 @@ if pagina == "📊 Gerente":
                 st.plotly_chart(fig, use_container_width=True)
         
         with col_graf2:
-            st.subheader("📊 Tipo de servicio")
-            if 'clase_checkout' in df.columns:
-                tipo_counts = df['clase_checkout'].value_counts()
-                fig = px.pie(
-                    values=tipo_counts.values,
-                    names=tipo_counts.index,
-                    title='Salidas vs Repasos'
+            st.subheader("📊 Probabilidad Late Checkout")
+            if 'prob_late' in df.columns:
+                fig = px.histogram(
+                    df, 
+                    x='prob_late', 
+                    nbins=20,
+                    title='Distribución de probabilidades',
+                    labels={'prob_late': 'Probabilidad'}
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -243,7 +373,7 @@ if pagina == "📊 Gerente":
         st.dataframe(df.head(100), use_container_width=True, height=400)
 
 # =============================================================================
-# VISTA CAMARERA - CON LIMPIEZA EN CURSO ARRIBA
+# VISTA CAMARERA - CON MODELOS
 # =============================================================================
 
 elif pagina == "🧹 Camarera":
@@ -265,90 +395,43 @@ elif pagina == "🧹 Camarera":
             )
             
             if st.session_state.camarera_actual:
-                # Inicializar lista de completadas al seleccionar camarera
+                # Inicializar listas
                 st.session_state.habitaciones_completadas = []
+                st.session_state.asignacion_actual = None
                 st.rerun()
         else:
-            # Inicializar lista de completadas si no existe
+            # Inicializar si no existe
             if 'habitaciones_completadas' not in st.session_state:
                 st.session_state.habitaciones_completadas = []
             
             # Obtener número de camarera
             num_cam = int(st.session_state.camarera_actual.split()[1])
             
-            # DEFINIR CLÚSTERES DE PLANTAS (compactos, adyacentes)
-            clusteres_plantas = {
-                # Sector Bajo (19 camareras) - plantas 2-15
-                1: [2, 3, 4],      # Camareras 1-3
-                2: [5, 6],         # Camareras 4-5
-                3: [7, 8, 9],      # Camareras 6-8
-                4: [10, 11],       # Camareras 9-10
-                5: [12, 13],       # Camareras 11-12
-                6: [14, 15],       # Camareras 13-14
-                
-                # Sector Medio (11 camareras) - plantas 16-30
-                7: [16, 17, 18],   # Camareras 15-17
-                8: [19, 20, 21],   # Camareras 18-20
-                9: [22, 23, 24],   # Camareras 21-23
-                10: [25, 26],      # Camareras 24-25
-                11: [27, 28, 29, 30], # Camareras 26-29
-                
-                # Sector Alto (5 camareras) - plantas 31-52
-                12: [31, 32, 33, 34, 35],  # Camarera 30
-                13: [36, 37, 38, 39, 40],  # Camarera 31
-                14: [41, 42, 43, 44, 45],  # Camarera 32
-                15: [46, 47, 48, 49, 50],  # Camarera 33
-                16: [51, 52],               # Camarera 34
-            }
-            
-            # Asignar clúster según número de camarera
-            if num_cam <= 3:
-                cluster = 1
-            elif num_cam <= 5:
-                cluster = 2
-            elif num_cam <= 8:
-                cluster = 3
-            elif num_cam <= 10:
-                cluster = 4
-            elif num_cam <= 12:
-                cluster = 5
-            elif num_cam <= 14:
-                cluster = 6
-            elif num_cam <= 17:
-                cluster = 7
-            elif num_cam <= 20:
-                cluster = 8
-            elif num_cam <= 23:
-                cluster = 9
-            elif num_cam <= 25:
-                cluster = 10
-            elif num_cam <= 29:
-                cluster = 11
-            elif num_cam == 30:
-                cluster = 12
-            elif num_cam == 31:
-                cluster = 13
-            elif num_cam == 32:
-                cluster = 14
-            elif num_cam == 33:
-                cluster = 15
-            else:
-                cluster = 16
-            
-            plantas_asignadas = clusteres_plantas[cluster]
-            sector = 'Bajo' if cluster <= 6 else ('Medio' if cluster <= 11 else 'Alto')
+            # USAR MODELOS PARA ASIGNAR HABITACIONES
+            if st.session_state.asignacion_actual is None:
+                with st.spinner("Asignando habitaciones con IA..."):
+                    df_asignadas = asignar_habitaciones_por_modelos(df, num_cam)
+                    if len(df_asignadas) > 0:
+                        st.session_state.asignacion_actual = df_asignadas
+                    else:
+                        st.warning("No hay habitaciones disponibles")
+                        st.session_state.asignacion_actual = pd.DataFrame()
             
             # Mostrar información de la camarera
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
                 st.success(f"👤 {st.session_state.camarera_actual}")
             with col_info2:
-                st.info(f"📌 Plantas: {min(plantas_asignadas)}-{max(plantas_asignadas)} ({sector})")
+                if modelos.get('kmeans') is not None and len(st.session_state.asignacion_actual) > 0:
+                    plantas_unicas = sorted(st.session_state.asignacion_actual['planta'].unique())
+                    st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)} ({len(plantas_unicas)} plantas)")
+                else:
+                    st.info("📌 Asignación IA")
             with col_info3:
                 if st.button("🔄 Cambiar usuario"):
                     st.session_state.camarera_actual = None
-                    if 'habitaciones_completadas' in st.session_state:
-                        del st.session_state.habitaciones_completadas
+                    st.session_state.asignacion_actual = None
+                    st.session_state.habitaciones_completadas = []
                     st.rerun()
             
             st.markdown("---")
@@ -395,7 +478,7 @@ elif pagina == "🧹 Camarera":
                             time.sleep(1)
                             st.rerun()
                     
-                    # Reportar incidencia (dentro del mismo contenedor)
+                    # Reportar incidencia
                     with st.expander("⚠️ Reportar incidencia"):
                         tipo_inc = st.selectbox(
                             "Tipo de incidencia",
@@ -414,7 +497,7 @@ elif pagina == "🧹 Camarera":
                             })
                             st.success("✅ Incidencia reportada")
                             
-                            # También mover a completadas aunque haya incidencia
+                            # Mover a completadas aunque haya incidencia
                             hab_id = hab['habitacion_id']
                             st.session_state.habitaciones_completadas.append(hab_id)
                             
@@ -426,106 +509,71 @@ elif pagina == "🧹 Camarera":
                     st.markdown("---")
             
             # ===== SECCIÓN 2: HABITACIONES PENDIENTES =====
-            # Filtrar habitaciones de sus plantas asignadas que NO estén completadas
-            df_asignadas = df[df['planta'].isin(plantas_asignadas)].copy()
-            
-            # Excluir las que ya están completadas
-            if st.session_state.habitaciones_completadas:
-                df_asignadas = df_asignadas[~df_asignadas['habitacion_id'].isin(
-                    st.session_state.habitaciones_completadas
-                )]
-            
-            # Si no hay suficientes en sus plantas, tomar las más cercanas
-            if len(df_asignadas) < 4:
-                todas_plantas = sorted(set(df['planta']))
-                idx_actual = todas_plantas.index(min(plantas_asignadas))
-                
-                plantas_extra = []
-                if idx_actual > 0:
-                    plantas_extra.append(todas_plantas[idx_actual - 1])
-                if idx_actual + len(plantas_asignadas) < len(todas_plantas):
-                    plantas_extra.append(todas_plantas[idx_actual + len(plantas_asignadas)])
-                
-                df_extra = df[df['planta'].isin(plantas_extra)]
-                # Excluir completadas también de las extra
-                if st.session_state.habitaciones_completadas:
-                    df_extra = df_extra[~df_extra['habitacion_id'].isin(
+            if len(st.session_state.asignacion_actual) > 0:
+                # Excluir completadas
+                df_pendientes = st.session_state.asignacion_actual[
+                    ~st.session_state.asignacion_actual['habitacion_id'].isin(
                         st.session_state.habitaciones_completadas
-                    )]
-                df_asignadas = pd.concat([df_asignadas, df_extra]).drop_duplicates()
-            
-            # Limitar a máximo 8 habitaciones pendientes
-            df_pendientes = df_asignadas.copy()
-            if len(df_pendientes) > 8:
-                if 'clase_checkout' in df_pendientes.columns:
-                    urgentes = df_pendientes[df_pendientes['clase_checkout'] == 'Salida']
-                    no_urgentes = df_pendientes[df_pendientes['clase_checkout'] != 'Salida']
-                    
-                    urgentes = urgentes.head(4)
-                    restantes = 8 - len(urgentes)
-                    no_urgentes = no_urgentes.head(restantes)
-                    df_pendientes = pd.concat([urgentes, no_urgentes])
+                    )
+                ].copy()
+                
+                # Ordenar por prioridad (late checkout primero)
+                if 'late_checkout_pred' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['late_checkout_pred', 'habitacion_id'], 
+                        ascending=[False, False]
+                    )
+                
+                st.subheader(f"📋 Pendientes ({len(df_pendientes)} restantes)")
+                
+                if len(df_pendientes) == 0:
+                    st.success("🎉 ¡Has completado todas tus habitaciones!")
+                    st.balloons()
                 else:
-                    df_pendientes = df_pendientes.head(8)
-            
-            # Ordenar pendientes: urgentes primero, luego por número descendente
-            if 'clase_checkout' in df_pendientes.columns:
-                df_pendientes['es_urgente'] = (df_pendientes['clase_checkout'] == 'Salida').astype(int)
-                df_pendientes = df_pendientes.sort_values(
-                    by=['es_urgente', 'habitacion_id'], 
-                    ascending=[False, False]
-                ).drop('es_urgente', axis=1)
-            else:
-                df_pendientes = df_pendientes.sort_values('habitacion_id', ascending=False)
-            
-            st.subheader(f"📋 Pendientes ({len(df_pendientes)} restantes)")
-            
-            if len(df_pendientes) == 0:
-                st.success("🎉 ¡Has completado todas tus habitaciones!")
-                st.balloons()
-            else:
-                for idx, row in df_pendientes.iterrows():
-                    with st.container():
-                        cols = st.columns([3, 2, 2, 3])
-                        
-                        with cols[0]:
-                            tipo_emoji = "🔴" if row.get('clase_checkout') == 'Salida' else "🟡"
-                            st.markdown(f"{tipo_emoji} **Hab {int(row['habitacion_id'])}**")
-                            st.caption(f"Planta {int(row['planta'])}")
-                        
-                        with cols[1]:
-                            tipo_serv = row.get('clase_checkout', 'N/A')
-                            if tipo_serv == 'Salida':
-                                st.markdown("🏃 **Checkout**")
-                            else:
-                                st.markdown("🛏️ **Repaso**")
-                        
-                        with cols[2]:
-                            if 'tiempo_estimado' in row:
-                                st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
-                        
-                        with cols[3]:
-                            # Deshabilitar botón si hay una limpieza en curso
-                            disabled = st.session_state.cronometro_activo
-                            if st.button(
-                                f"▶️ Iniciar", 
-                                key=f"btn_{idx}", 
-                                disabled=disabled,
-                                use_container_width=True
-                            ):
-                                st.session_state.habitacion_actual = row
-                                st.session_state.cronometro_activo = True
-                                st.session_state.tiempo_inicio = datetime.now()
-                                st.rerun()
-                        
-                        st.divider()
+                    for idx, row in df_pendientes.iterrows():
+                        with st.container():
+                            cols = st.columns([3, 2, 2, 3])
+                            
+                            with cols[0]:
+                                # Indicador visual de prioridad
+                                if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
+                                    tipo_emoji = "🔴"
+                                else:
+                                    tipo_emoji = "🟡"
+                                st.markdown(f"{tipo_emoji} **Hab {int(row['habitacion_id'])}**")
+                                st.caption(f"Planta {int(row['planta'])}")
+                            
+                            with cols[1]:
+                                if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
+                                    st.markdown("🏃 **Late**")
+                                else:
+                                    st.markdown("🛏️ **Normal**")
+                            
+                            with cols[2]:
+                                if 'tiempo_estimado' in row:
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
+                            
+                            with cols[3]:
+                                # Deshabilitar si hay limpieza en curso
+                                disabled = st.session_state.cronometro_activo
+                                if st.button(
+                                    f"▶️ Iniciar", 
+                                    key=f"btn_{idx}_{row['habitacion_id']}", 
+                                    disabled=disabled,
+                                    use_container_width=True
+                                ):
+                                    st.session_state.habitacion_actual = row
+                                    st.session_state.cronometro_activo = True
+                                    st.session_state.tiempo_inicio = datetime.now()
+                                    st.rerun()
+                            
+                            st.divider()
             
             # ===== SECCIÓN 3: HABITACIONES COMPLETADAS =====
             if st.session_state.habitaciones_completadas:
                 st.markdown("---")
                 st.subheader(f"✅ Completadas hoy ({len(st.session_state.habitaciones_completadas)})")
                 
-                # Obtener datos de las completadas
                 df_completadas = df[df['habitacion_id'].isin(
                     st.session_state.habitaciones_completadas
                 )]
@@ -539,8 +587,10 @@ elif pagina == "🧹 Camarera":
                             st.caption(f"Planta {int(row['planta'])}")
                         
                         with cols[1]:
-                            tipo_serv = row.get('clase_checkout', 'N/A')
-                            st.markdown(f"~~{tipo_serv}~~")
+                            if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
+                                st.markdown("~~Late~~")
+                            else:
+                                st.markdown("~~Normal~~")
                         
                         with cols[2]:
                             if 'tiempo_estimado' in row:
@@ -573,7 +623,7 @@ elif pagina == "⚠️ Incidencias":
                         st.markdown(f"**Habitación {inc['habitacion']}** (Planta {inc['planta']})")
                         st.markdown(f"**{inc['tipo']}:** {inc['descripcion']}")
                     with col_inc2:
-                        if st.button("✓ Resolver", key=f"resolver_{len(st.session_state.incidencias)}"):
+                        if st.button("✓ Resolver", key=f"resolver_{inc['habitacion']}_{inc['timestamp']}"):
                             st.session_state.incidencias.remove(inc)
                             st.rerun()
                     st.divider()
@@ -631,6 +681,7 @@ elif pagina == "📋 Dataset":
     else:
         df = st.session_state.df_pms.copy()
         
+        # Añadir opiniones al dataset
         if st.session_state.opiniones:
             for op in st.session_state.opiniones:
                 mask = df['habitacion_id'] == op['habitacion']
@@ -644,13 +695,12 @@ elif pagina == "📋 Dataset":
         with col_met1:
             st.metric("Total registros", len(df))
         with col_met2:
-            st.metric("Con opiniones", len([o for o in st.session_state.opiniones]))
+            st.metric("Con opiniones", len([o for o in st.session_state.opiniones if o]))
         with col_met3:
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_met4:
-            if 'clase_checkout' in df.columns:
-                checkouts = len(df[df['clase_checkout'] == 'Salida'])
-                st.metric("Checkouts", checkouts)
+            if 'late_checkout_pred' in df.columns:
+                st.metric("Late checkout", int(df['late_checkout_pred'].sum()))
         
         st.subheader("📋 Datos completos")
         st.dataframe(df, use_container_width=True, height=500)
