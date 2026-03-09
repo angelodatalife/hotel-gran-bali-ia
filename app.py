@@ -296,7 +296,7 @@ with st.sidebar:
         st.rerun()
 
 # =============================================================================
-# VISTA GERENTE
+# VISTA GERENTE - CON SECTORES Y CAMARERAS
 # =============================================================================
 
 if pagina == "📊 Gerente":
@@ -361,55 +361,169 @@ if pagina == "📊 Gerente":
         df = st.session_state.df_pms
         st.markdown("---")
         
-        st.subheader("📈 Distribución por bloques adyacentes")
+        # ===== DISTRIBUCIÓN POR SECTORES =====
+        st.subheader("🏢 Distribución por Sectores")
         
-        if st.session_state.asignacion_por_camarera:
-            # Mostrar resumen de bloques
-            bloques_resumen = {}
-            for cam, df_cam in st.session_state.asignacion_por_camarera.items():
-                plantas = sorted(df_cam['planta'].unique())
-                if len(plantas) > 0:
-                    bloque_key = f"{min(plantas)}-{max(plantas)}"
-                    if bloque_key not in bloques_resumen:
-                        bloques_resumen[bloque_key] = []
-                    bloques_resumen[bloque_key].append(cam)
+        # Definir sectores
+        sectores = {
+            'Bajo (Pl 2-15)': {'plantas': list(range(2, 16)), 'camareras_base': 19},
+            'Medio (Pl 16-30)': {'plantas': list(range(16, 31)), 'camareras_base': 11},
+            'Alto (Pl 31-52)': {'plantas': list(range(31, 53)), 'camareras_base': 5}
+        }
+        
+        # Calcular datos por sector
+        datos_sectores = []
+        for sector, info in sectores.items():
+            df_sector = df[df['planta'].isin(info['plantas'])]
+            num_hab = len(df_sector)
             
-            st.markdown("**Bloques de trabajo:**")
-            for bloque, cams in bloques_resumen.items():
-                st.markdown(f"- Plantas {bloque}: {len(cams)} camareras")
+            # Calcular camareras asignadas realmente (desde la asignación)
+            cam_asignadas = 0
+            if st.session_state.asignacion_por_camarera:
+                for cam, df_cam in st.session_state.asignacion_por_camarera.items():
+                    if any(p in info['plantas'] for p in df_cam['planta'].unique()):
+                        cam_asignadas += 1
             
-            # Gráficos de carga
-            datos_carga = []
-            for cam, df_cam in st.session_state.asignacion_por_camarera.items():
-                tiempo = df_cam['tiempo_estimado'].sum() if 'tiempo_estimado' in df_cam.columns else len(df_cam) * 25
-                datos_carga.append({
-                    'Camarera': cam,
-                    'Habitaciones': len(df_cam),
-                    'Tiempo (min)': round(tiempo, 1),
-                    'Plantas': f"{int(df_cam['planta'].min())}-{int(df_cam['planta'].max())}"
-                })
+            # Usar base si no hay asignación
+            if cam_asignadas == 0:
+                cam_asignadas = info['camareras_base']
             
-            df_carga = pd.DataFrame(datos_carga)
+            # Calcular tiempo total del sector
+            tiempo_total = df_sector['tiempo_estimado'].sum() if 'tiempo_estimado' in df_sector.columns else num_hab * 25
             
-            col_graf1, col_graf2 = st.columns(2)
-            
-            with col_graf1:
+            datos_sectores.append({
+                'Sector': sector,
+                'Habitaciones': num_hab,
+                'Camareras': cam_asignadas,
+                'Hab/Cam': round(num_hab / cam_asignadas, 1) if cam_asignadas > 0 else 0,
+                'Tiempo total (min)': round(tiempo_total, 1),
+                'Tiempo/cam (min)': round(tiempo_total / cam_asignadas, 1) if cam_asignadas > 0 else 0
+            })
+        
+        df_sectores = pd.DataFrame(datos_sectores)
+        
+        # Mostrar métricas por sector en columnas
+        col_sect1, col_sect2, col_sect3 = st.columns(3)
+        
+        with col_sect1:
+            st.markdown("### 🔵 Sector Bajo")
+            st.metric("Habitaciones", df_sectores.iloc[0]['Habitaciones'])
+            st.metric("Camareras", df_sectores.iloc[0]['Camareras'])
+            st.metric("Hab/Cam", df_sectores.iloc[0]['Hab/Cam'])
+            st.metric("Tiempo total", f"{df_sectores.iloc[0]['Tiempo total (min)']} min")
+        
+        with col_sect2:
+            st.markdown("### 🟡 Sector Medio")
+            st.metric("Habitaciones", df_sectores.iloc[1]['Habitaciones'])
+            st.metric("Camareras", df_sectores.iloc[1]['Camareras'])
+            st.metric("Hab/Cam", df_sectores.iloc[1]['Hab/Cam'])
+            st.metric("Tiempo total", f"{df_sectores.iloc[1]['Tiempo total (min)']} min")
+        
+        with col_sect3:
+            st.markdown("### 🔴 Sector Alto")
+            st.metric("Habitaciones", df_sectores.iloc[2]['Habitaciones'])
+            st.metric("Camareras", df_sectores.iloc[2]['Camareras'])
+            st.metric("Hab/Cam", df_sectores.iloc[2]['Hab/Cam'])
+            st.metric("Tiempo total", f"{df_sectores.iloc[2]['Tiempo total (min)']} min")
+        
+        st.markdown("---")
+        
+        # ===== GRÁFICOS DE SECTORES =====
+        col_graf_sect1, col_graf_sect2 = st.columns(2)
+        
+        with col_graf_sect1:
+            # Gráfico de barras: Habitaciones vs Camareras
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name='Habitaciones',
+                x=df_sectores['Sector'],
+                y=df_sectores['Habitaciones'],
+                marker_color=['#1E88E5', '#FFC107', '#DC143C']
+            ))
+            fig.add_trace(go.Bar(
+                name='Camareras',
+                x=df_sectores['Sector'],
+                y=df_sectores['Camareras'],
+                marker_color=['#90CAF9', '#FFE082', '#FF8A80']
+            ))
+            fig.update_layout(
+                title='Habitaciones vs Camareras por Sector',
+                barmode='group',
+                yaxis_title='Cantidad'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col_graf_sect2:
+            # Gráfico de carga (tiempo por camarera)
+            fig = px.bar(
+                df_sectores,
+                x='Sector',
+                y='Tiempo/cam (min)',
+                color='Sector',
+                title='Tiempo estimado por camarera (min)',
+                color_discrete_map={
+                    'Bajo (Pl 2-15)': '#1E88E5',
+                    'Medio (Pl 16-30)': '#FFC107',
+                    'Alto (Pl 31-52)': '#DC143C'
+                }
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ===== TABLA DE SECTORES =====
+        st.subheader("📋 Detalle por Sector")
+        
+        # Formatear tabla para mejor visualización
+        df_sectores_display = df_sectores.copy()
+        df_sectores_display['Tiempo total (min)'] = df_sectores_display['Tiempo total (min)'].astype(int)
+        df_sectores_display['Tiempo/cam (min)'] = df_sectores_display['Tiempo/cam (min)'].astype(int)
+        
+        st.dataframe(
+            df_sectores_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Sector': 'Sector',
+                'Habitaciones': '🏨 Habitaciones',
+                'Camareras': '👤 Camareras',
+                'Hab/Cam': '📊 Hab/Cam',
+                'Tiempo total (min)': '⏱️ Tiempo total',
+                'Tiempo/cam (min)': '⏱️ Tiempo/cam'
+            }
+        )
+        
+        st.markdown("---")
+        
+        # ===== GRÁFICOS ADICIONALES (los que ya tenías) =====
+        st.subheader("📈 Distribución por planta")
+        
+        col_graf1, col_graf2 = st.columns(2)
+        
+        with col_graf1:
+            if 'planta' in df.columns:
+                planta_counts = df['planta'].value_counts().sort_index()
                 fig = px.bar(
-                    df_carga, 
-                    x='Camarera', 
-                    y='Habitaciones',
-                    color='Plantas',
-                    title='Habitaciones por camarera'
+                    x=planta_counts.index,
+                    y=planta_counts.values,
+                    labels={'x': 'Planta', 'y': 'Habitaciones'},
+                    title='Habitaciones por planta',
+                    color_discrete_sequence=['#1E88E5']
                 )
+                # Añadir líneas de separación de sectores
+                fig.add_vline(x=15.5, line_dash="dash", line_color="gray", annotation_text="Bajo/Medio")
+                fig.add_vline(x=30.5, line_dash="dash", line_color="gray", annotation_text="Medio/Alto")
                 st.plotly_chart(fig, use_container_width=True)
-            
-            with col_graf2:
-                fig = px.bar(
-                    df_carga, 
-                    x='Camarera', 
-                    y='Tiempo (min)',
-                    color='Plantas',
-                    title='Tiempo estimado por camarera'
+        
+        with col_graf2:
+            if 'prob_late' in df.columns:
+                fig = px.histogram(
+                    df, 
+                    x='prob_late', 
+                    nbins=20,
+                    title='Distribución de probabilidades Late Checkout',
+                    labels={'prob_late': 'Probabilidad'},
+                    color_discrete_sequence=['#DC143C']
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
