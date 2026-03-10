@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con dataset enriquecido y vista Cliente
+# Versión con pantalla de inicio centralizada
 # =============================================================================
 
 import streamlit as st
@@ -93,6 +93,8 @@ if 'selected_page' not in st.session_state:
     st.session_state.selected_page = "📊 Gerente"
 if 'num_camareras' not in st.session_state:
     st.session_state.num_camareras = TOTAL_CAMARERAS
+if 'archivo_cargado' not in st.session_state:
+    st.session_state.archivo_cargado = False
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -251,527 +253,754 @@ def actualizar_dataset(hab_id, campo, valor):
             df.loc[df['habitacion_id'] == hab_id, campo] = valor
             st.session_state.df_pms = df
 
+def procesar_archivo(archivo):
+    """Procesa el archivo cargado y actualiza el estado de la sesión"""
+    with st.spinner("Procesando archivo..."):
+        df = pd.read_csv(archivo)
+        
+        # Asegurar que existen las columnas necesarias
+        columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 'sentimiento_nlp']
+        for col in columnas_necesarias:
+            if col not in df.columns:
+                df[col] = None
+        
+        # Aplicar ANN
+        if modelos.get('ann') is not None:
+            try:
+                ann_model = modelos['ann']['modelo']
+                scaler_ann = modelos['ann']['scaler']
+                feature_cols = modelos['ann']['feature_cols']
+                
+                cols_disponibles = [c for c in feature_cols if c in df.columns]
+                if len(cols_disponibles) == len(feature_cols):
+                    X_ann = df[feature_cols].values
+                    X_ann_scaled = scaler_ann.transform(X_ann)
+                    
+                    prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
+                    df['prob_late'] = prob_late
+                    df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
+            except Exception as e:
+                st.warning(f"⚠️ No se pudo aplicar ANN")
+        
+        st.session_state.df_pms = df
+        
+        with st.spinner("Calculando asignación por bloques adyacentes..."):
+            st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(df, st.session_state.num_camareras)
+        
+        st.session_state.archivo_cargado = True
+        st.session_state.selected_page = "📊 Gerente"
+        st.success(f"✅ PMS cargado: {len(df)} habitaciones")
+        time.sleep(1)
+        st.rerun()
+
 # =============================================================================
-# SIDEBAR - NAVEGACIÓN (IZQUIERDA)
+# PANTALLA DE INICIO (antes de cargar archivo)
 # =============================================================================
 
-with st.sidebar:
-    st.title("🏨 Hotel Gran Bali")
-    st.markdown("---")
+def mostrar_pantalla_inicio():
+    """Muestra la pantalla de inicio centralizada"""
     
-    # Menú principal con contadores alineados
-    st.markdown("**Menú Principal**")
+    # Título principal
+    st.markdown(
+        """
+        <h1 style='text-align: center; color: #1E88E5;'>🏨 Hotel Gran Bali</h1>
+        <h3 style='text-align: center; color: #666;'>Sistema de Gestión IA de Limpieza</h3>
+        <br><br>
+        """,
+        unsafe_allow_html=True
+    )
     
-    # Gerente
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        gerente_selected = st.button("📊 Gerente", key="btn_gerente", use_container_width=True)
+    # Contenedor central para la carga de archivos
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
     with col2:
-        st.markdown("")  # Espacio vacío
-    with col3:
-        st.markdown("")  # Espacio vacío
-    
-    # Camarera
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        camarera_selected = st.button("🧹 Camarera", key="btn_camarera", use_container_width=True)
-    with col2:
-        st.markdown("")
-    with col3:
-        st.markdown("")
-    
-    # Incidencias con contador
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        incidencias_selected = st.button("⚠️ Incidencias", key="btn_incidencias", use_container_width=True)
-    with col2:
-        if st.session_state.incidencias:
-            st.markdown(f"**({len(st.session_state.incidencias)})**")
-    with col3:
-        st.markdown("")
-    
-    # Mantenimiento con contador
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        mantenimiento_selected = st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True)
-    with col2:
-        if st.session_state.mantenimiento:
-            st.markdown(f"**({len(st.session_state.mantenimiento)})**")
-    with col3:
-        st.markdown("")
-    
-    # Cliente
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        cliente_selected = st.button("👤 Cliente", key="btn_cliente", use_container_width=True)
-    with col2:
-        st.markdown("")
-    with col3:
-        st.markdown("")
-    
-    # Dataset
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        dataset_selected = st.button("📋 Dataset", key="btn_dataset", use_container_width=True)
-    with col2:
-        st.markdown("")
-    with col3:
-        st.markdown("")
-    
-    # Determinar la página seleccionada
-    if gerente_selected:
-        st.session_state.selected_page = "📊 Gerente"
-    elif camarera_selected:
-        st.session_state.selected_page = "🧹 Camarera"
-    elif incidencias_selected:
-        st.session_state.selected_page = "⚠️ Incidencias"
-    elif mantenimiento_selected:
-        st.session_state.selected_page = "🔧 Mantenimiento"
-    elif cliente_selected:
-        st.session_state.selected_page = "👤 Cliente"
-    elif dataset_selected:
-        st.session_state.selected_page = "📋 Dataset"
-    
-    selected = st.session_state.selected_page
-    
-    st.markdown("---")
-    
-    # Cargar archivo CSV
-    st.subheader("📂 Cargar PMS")
-    archivo = st.file_uploader("Selecciona archivo CSV", type=['csv'], key="file_uploader_sidebar")
-    
-    if archivo is not None and st.session_state.df_pms is None:
-        with st.spinner("Procesando archivo..."):
-            df = pd.read_csv(archivo)
-            
-            # Asegurar que existen las columnas necesarias
-            columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 'sentimiento_nlp']
-            for col in columnas_necesarias:
-                if col not in df.columns:
-                    df[col] = None
-            
-            # Aplicar ANN
+        # Caja de carga de archivos (estilo drag and drop)
+        st.markdown(
+            """
+            <div style="
+                border: 3px dashed #1E88E5;
+                border-radius: 20px;
+                padding: 40px;
+                text-align: center;
+                background-color: #f8f9fa;
+                margin-bottom: 30px;
+            ">
+                <h2 style="color: #1E88E5;">📂 Cargar PMS</h2>
+                <p style="font-size: 18px; color: #666;">Arrastra tu archivo CSV aquí</p>
+                <p style="color: #999;">o</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # File uploader de Streamlit (estilizado)
+        archivo = st.file_uploader(
+            "Selecciona archivo CSV",
+            type=['csv'],
+            key="file_uploader_inicio",
+            label_visibility="collapsed"
+        )
+        
+        if archivo is not None:
+            procesar_archivo(archivo)
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Sección de modelos cargados
+        st.markdown(
+            """
+            <h3 style='text-align: center; color: #666;'>🤖 Modelos cargados</h3>
+            <br>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Mostrar modelos en filas
+        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+        
+        with col_mod1:
             if modelos.get('ann') is not None:
-                try:
-                    ann_model = modelos['ann']['modelo']
-                    scaler_ann = modelos['ann']['scaler']
-                    feature_cols = modelos['ann']['feature_cols']
-                    
-                    cols_disponibles = [c for c in feature_cols if c in df.columns]
-                    if len(cols_disponibles) == len(feature_cols):
-                        X_ann = df[feature_cols].values
-                        X_ann_scaled = scaler_ann.transform(X_ann)
-                        
-                        prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
-                        df['prob_late'] = prob_late
-                        df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
-                except Exception as e:
-                    st.warning(f"⚠️ No se pudo aplicar ANN")
-            
-            st.session_state.df_pms = df
-            
-            with st.spinner("Calculando asignación por bloques adyacentes..."):
-                st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(df, st.session_state.num_camareras)
-            
-            st.success(f"✅ PMS cargado: {len(df)} habitaciones")
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #e8f5e8;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #4CAF50;
+                    ">
+                        <span style="font-size: 24px;">✅</span><br>
+                        <strong>ANN</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #ffebee;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #f44336;
+                    ">
+                        <span style="font-size: 24px;">❌</span><br>
+                        <strong>ANN</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod2:
+            if modelos.get('xgboost') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #e8f5e8;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #4CAF50;
+                    ">
+                        <span style="font-size: 24px;">✅</span><br>
+                        <strong>XGBoost</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #ffebee;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #f44336;
+                    ">
+                        <span style="font-size: 24px;">❌</span><br>
+                        <strong>XGBoost</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod3:
+            if modelos.get('kmeans') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #e8f5e8;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #4CAF50;
+                    ">
+                        <span style="font-size: 24px;">✅</span><br>
+                        <strong>K-Means</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #ffebee;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #f44336;
+                    ">
+                        <span style="font-size: 24px;">❌</span><br>
+                        <strong>K-Means</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod4:
+            if modelos.get('nlp') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #e8f5e8;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #4CAF50;
+                    ">
+                        <span style="font-size: 24px;">✅</span><br>
+                        <strong>NLP</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #ffebee;
+                        border-radius: 10px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #f44336;
+                    ">
+                        <span style="font-size: 24px;">❌</span><br>
+                        <strong>NLP</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Información adicional
+        st.markdown(
+            """
+            <div style="
+                background-color: #e3f2fd;
+                border-radius: 10px;
+                padding: 20px;
+                text-align: center;
+                border: 1px solid #1E88E5;
+            ">
+                <p style="color: #0d47a1; margin: 0;">
+                    <strong>📊 Formato esperado:</strong> CSV con columnas: habitacion_id, planta, tiempo_estimado, etc.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# =============================================================================
+# SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
+# =============================================================================
+
+def mostrar_sidebar():
+    """Muestra el sidebar con la navegación (solo después de cargar archivo)"""
+    with st.sidebar:
+        st.title("🏨 Hotel Gran Bali")
+        st.markdown("---")
+        
+        # Menú principal con contadores alineados
+        st.markdown("**Menú Principal**")
+        
+        # Gerente
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            gerente_selected = st.button("📊 Gerente", key="btn_gerente", use_container_width=True)
+        with col2:
+            st.markdown("")
+        with col3:
+            st.markdown("")
+        
+        # Camarera
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            camarera_selected = st.button("🧹 Camarera", key="btn_camarera", use_container_width=True)
+        with col2:
+            st.markdown("")
+        with col3:
+            st.markdown("")
+        
+        # Incidencias con contador
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            incidencias_selected = st.button("⚠️ Incidencias", key="btn_incidencias", use_container_width=True)
+        with col2:
+            if st.session_state.incidencias:
+                st.markdown(f"**({len(st.session_state.incidencias)})**")
+        with col3:
+            st.markdown("")
+        
+        # Mantenimiento con contador
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            mantenimiento_selected = st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True)
+        with col2:
+            if st.session_state.mantenimiento:
+                st.markdown(f"**({len(st.session_state.mantenimiento)})**")
+        with col3:
+            st.markdown("")
+        
+        # Cliente
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            cliente_selected = st.button("👤 Cliente", key="btn_cliente", use_container_width=True)
+        with col2:
+            st.markdown("")
+        with col3:
+            st.markdown("")
+        
+        # Dataset
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            dataset_selected = st.button("📋 Dataset", key="btn_dataset", use_container_width=True)
+        with col2:
+            st.markdown("")
+        with col3:
+            st.markdown("")
+        
+        # Determinar la página seleccionada
+        if gerente_selected:
+            st.session_state.selected_page = "📊 Gerente"
+        elif camarera_selected:
+            st.session_state.selected_page = "🧹 Camarera"
+        elif incidencias_selected:
+            st.session_state.selected_page = "⚠️ Incidencias"
+        elif mantenimiento_selected:
+            st.session_state.selected_page = "🔧 Mantenimiento"
+        elif cliente_selected:
+            st.session_state.selected_page = "👤 Cliente"
+        elif dataset_selected:
+            st.session_state.selected_page = "📋 Dataset"
+        
+        st.markdown("---")
+        
+        # Modelos cargados
+        st.subheader("🤖 Modelos cargados")
+        modelos_lista = {
+            'ANN': modelos.get('ann') is not None,
+            'XGBoost': modelos.get('xgboost') is not None,
+            'K-Means': modelos.get('kmeans') is not None,
+            'NLP': modelos.get('nlp') is not None
+        }
+        for nombre, cargado in modelos_lista.items():
+            if cargado:
+                st.markdown(f"✅ {nombre}")
+            else:
+                st.markdown(f"❌ {nombre}")
+        
+        st.markdown("---")
+        
+        if st.button("🔄 Reiniciar Simulación", use_container_width=True):
+            for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
+                        'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
+                        'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 'archivo_cargado']:
+                if key in st.session_state:
+                    if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'habitaciones_standby']:
+                        st.session_state[key] = []
+                    else:
+                        st.session_state[key] = None
+            st.session_state.archivo_cargado = False
             st.rerun()
-    
-    st.markdown("---")
-    
-    # Modelos cargados
-    st.subheader("🤖 Modelos cargados")
-    modelos_lista = {
-        'ANN': modelos.get('ann') is not None,
-        'XGBoost': modelos.get('xgboost') is not None,
-        'K-Means': modelos.get('kmeans') is not None,
-        'NLP': modelos.get('nlp') is not None
-    }
-    for nombre, cargado in modelos_lista.items():
-        if cargado:
-            st.markdown(f"✅ {nombre}")
-        else:
-            st.markdown(f"❌ {nombre}")
-    
-    st.markdown("---")
-    
-    if st.button("🔄 Reiniciar Simulación", use_container_width=True):
-        for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
-                    'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
-                    'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby']:
-            if key in st.session_state:
-                if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'habitaciones_standby']:
-                    st.session_state[key] = []
-                else:
-                    st.session_state[key] = None
-        st.rerun()
+
+# =============================================================================
+# LÓGICA PRINCIPAL DE NAVEGACIÓN
+# =============================================================================
+
+# Si no hay archivo cargado, mostrar pantalla de inicio
+if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
+    mostrar_pantalla_inicio()
+else:
+    # Mostrar sidebar y luego la vista correspondiente
+    mostrar_sidebar()
+    selected = st.session_state.selected_page
 
 # =============================================================================
 # VISTA GERENTE - CON 3 PESTAÑAS INTERNAS
 # =============================================================================
 
-if selected == "📊 Gerente":
+if st.session_state.archivo_cargado and selected == "📊 Gerente":
     
-    if st.session_state.df_pms is None:
-        st.warning("⚠️ Carga un archivo PMS desde el menú lateral")
-    else:
-        df = st.session_state.df_pms
+    df = st.session_state.df_pms
+    
+    # Crear las 3 pestañas internas
+    tab_dashboard, tab_estado, tab_carga = st.tabs(["📊 Dashboard Gerente", "🗺️ Estado de Habitaciones", "📊 Carga de trabajo por camarera"])
+    
+    # ===== PESTAÑA 1: DASHBOARD GERENTE (CÍRCULOS Y CONTROLES) =====
+    with tab_dashboard:
+        st.title("📊 Dashboard Gerente - Hotel Gran Bali")
         
-        # Crear las 3 pestañas internas
-        tab_dashboard, tab_estado, tab_carga = st.tabs(["📊 Dashboard Gerente", "🗺️ Estado de Habitaciones", "📊 Carga de trabajo por camarera"])
+        # Métricas principales en círculos
+        col_metric1, col_metric2, col_metric3 = st.columns(3)
         
-        # ===== PESTAÑA 1: DASHBOARD GERENTE (CÍRCULOS Y CONTROLES) =====
-        with tab_dashboard:
-            st.title("📊 Dashboard Gerente - Hotel Gran Bali")
-            
-            # Métricas principales en círculos
-            col_metric1, col_metric2, col_metric3 = st.columns(3)
-            
-            with col_metric1:
-                ocupacion = len(df) / TOTAL_HABITACIONES * 100
-                st.markdown(
-                    f"""
-                    <div style="
-                        width: 150px;
-                        height: 150px;
-                        border-radius: 50%;
-                        border: 4px solid #1E88E5;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 0 auto;
-                        background: transparent;
-                    ">
-                        <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
-                        <div style="font-size: 16px;">Ocupación</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_metric2:
-                habitaciones_hechas = len(st.session_state.habitaciones_completadas)
-                st.markdown(
-                    f"""
-                    <div style="
-                        width: 150px;
-                        height: 150px;
-                        border-radius: 50%;
-                        border: 4px solid #4CAF50;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 0 auto;
-                        background: transparent;
-                    ">
-                        <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
-                        <div style="font-size: 16px;">Habitaciones</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_metric3:
-                st.markdown(
-                    f"""
-                    <div style="
-                        width: 150px;
-                        height: 150px;
-                        border-radius: 50%;
-                        border: 4px solid #FFA500;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 0 auto;
-                        background: transparent;
-                    ">
-                        <div style="font-size: 32px; font-weight: bold;">{st.session_state.num_camareras}</div>
-                        <div style="font-size: 16px;">Camareras</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            # Selector de número de camareras
-            col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
-            with col_control2:
-                st.markdown("### Ajustar personal")
-                col_plus, col_num, col_minus = st.columns([1, 2, 1])
-                with col_plus:
-                    if st.button("➕", key="btn_plus"):
-                        st.session_state.num_camareras = min(50, st.session_state.num_camareras + 1)
-                        st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
-                            st.session_state.df_pms, 
-                            st.session_state.num_camareras
-                        )
-                        st.rerun()
-                with col_num:
-                    st.markdown(f"<h2 style='text-align: center;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
-                with col_minus:
-                    if st.button("➖", key="btn_minus"):
-                        st.session_state.num_camareras = max(1, st.session_state.num_camareras - 1)
-                        st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
-                            st.session_state.df_pms, 
-                            st.session_state.num_camareras
-                        )
-                        st.rerun()
-            
-            st.markdown("---")
-            
-            # Información adicional
-            st.subheader("📈 Resumen rápido")
-            col_res1, col_res2, col_res3, col_res4 = st.columns(4)
-            with col_res1:
-                st.metric("Checkouts estimados", int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0)
-            with col_res2:
-                st.metric("Repasos", len(df) - (int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0))
-            with col_res3:
-                st.metric("Incidencias", len(st.session_state.incidencias))
-            with col_res4:
-                st.metric("Mantenimiento", len(st.session_state.mantenimiento))
+        with col_metric1:
+            ocupacion = len(df) / TOTAL_HABITACIONES * 100
+            st.markdown(
+                f"""
+                <div style="
+                    width: 150px;
+                    height: 150px;
+                    border-radius: 50%;
+                    border: 4px solid #1E88E5;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto;
+                    background: transparent;
+                ">
+                    <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
+                    <div style="font-size: 16px;">Ocupación</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         
-        # ===== PESTAÑA 2: ESTADO DE HABITACIONES (MAPA DE COLORES) =====
-        with tab_estado:
-            st.title("🗺️ Estado de Habitaciones")
-            
+        with col_metric2:
+            habitaciones_hechas = len(st.session_state.habitaciones_completadas)
+            st.markdown(
+                f"""
+                <div style="
+                    width: 150px;
+                    height: 150px;
+                    border-radius: 50%;
+                    border: 4px solid #4CAF50;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto;
+                    background: transparent;
+                ">
+                    <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
+                    <div style="font-size: 16px;">Habitaciones</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_metric3:
+            st.markdown(
+                f"""
+                <div style="
+                    width: 150px;
+                    height: 150px;
+                    border-radius: 50%;
+                    border: 4px solid #FFA500;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto;
+                    background: transparent;
+                ">
+                    <div style="font-size: 32px; font-weight: bold;">{st.session_state.num_camareras}</div>
+                    <div style="font-size: 16px;">Camareras</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        # Selector de número de camareras
+        col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
+        with col_control2:
+            st.markdown("### Ajustar personal")
+            col_plus, col_num, col_minus = st.columns([1, 2, 1])
+            with col_plus:
+                if st.button("➕", key="btn_plus"):
+                    st.session_state.num_camareras = min(50, st.session_state.num_camareras + 1)
+                    st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
+                        st.session_state.df_pms, 
+                        st.session_state.num_camareras
+                    )
+                    st.rerun()
+            with col_num:
+                st.markdown(f"<h2 style='text-align: center;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
+            with col_minus:
+                if st.button("➖", key="btn_minus"):
+                    st.session_state.num_camareras = max(1, st.session_state.num_camareras - 1)
+                    st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
+                        st.session_state.df_pms, 
+                        st.session_state.num_camareras
+                    )
+                    st.rerun()
+        
+        st.markdown("---")
+        
+        # Información adicional
+        st.subheader("📈 Resumen rápido")
+        col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+        with col_res1:
+            st.metric("Checkouts estimados", int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0)
+        with col_res2:
+            st.metric("Repasos", len(df) - (int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0))
+        with col_res3:
+            st.metric("Incidencias", len(st.session_state.incidencias))
+        with col_res4:
+            st.metric("Mantenimiento", len(st.session_state.mantenimiento))
+    
+    # ===== PESTAÑA 2: ESTADO DE HABITACIONES (MAPA DE COLORES) =====
+    with tab_estado:
+        st.title("🗺️ Estado de Habitaciones")
+        
+        # Definir sectores
+        sectores = {
+            'Bajo (Pl 2-15)': list(range(2, 16)),
+            'Medio (Pl 16-30)': list(range(16, 31)),
+            'Alto (Pl 31-52)': list(range(31, 53))
+        }
+        
+        # Función para determinar el color de cada habitación
+        def get_room_color(hab_id):
+            if hab_id in st.session_state.habitaciones_completadas:
+                # Buscar si tuvo incidencia
+                for inc in st.session_state.incidencias:
+                    if inc['habitacion'] == hab_id:
+                        if inc['tipo'] == "Falta suministros":
+                            return "#FFA500"  # Naranja
+                        elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                            return "#FF4444"  # Rojo
+                for mant in st.session_state.mantenimiento:
+                    if mant['habitacion'] == hab_id:
+                        return "#808080"  # Gris
+                return "#4CAF50"  # Verde (completada sin problemas)
+            elif hab_id in st.session_state.habitaciones_standby:
+                # Buscar el tipo de problema para el color correcto
+                for inc in st.session_state.incidencias:
+                    if inc['habitacion'] == hab_id:
+                        if inc['tipo'] == "Falta suministros":
+                            return "#FFA500"  # Naranja
+                        elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                            return "#FF4444"  # Rojo
+                return "#FFA500"  # Naranja por defecto para standby
+            return "#FFFFFF"  # Blanco (pendiente)
+        
+        # Crear pestañas por sector
+        subtab1, subtab2, subtab3 = st.tabs(["🔵 Sector Bajo", "🟡 Sector Medio", "🔴 Sector Alto"])
+        
+        for subtab, (sector_nombre, plantas) in zip([subtab1, subtab2, subtab3], sectores.items()):
+            with subtab:
+                # Filtrar habitaciones del sector
+                df_sector = df[df['planta'].isin(plantas)]
+                
+                if len(df_sector) == 0:
+                    st.info(f"No hay habitaciones en {sector_nombre}")
+                    continue
+                
+                # Ordenar por número de habitación
+                df_sector = df_sector.sort_values('habitacion_id')
+                
+                # Crear grid de habitaciones
+                cols_por_fila = 6
+                habitaciones = df_sector['habitacion_id'].tolist()
+                
+                for i in range(0, len(habitaciones), cols_por_fila):
+                    cols = st.columns(cols_por_fila)
+                    for j, col in enumerate(cols):
+                        idx = i + j
+                        if idx < len(habitaciones):
+                            hab_id = habitaciones[idx]
+                            color = get_room_color(hab_id)
+                            
+                            # Buscar información adicional
+                            tooltip = f"Hab {hab_id}"
+                            row = df_sector[df_sector['habitacion_id'] == hab_id].iloc[0]
+                            if 'tiempo_estimado' in row:
+                                tooltip += f"\nTiempo: {row['tiempo_estimado']} min"
+                            
+                            # Cuadrado con número de habitación
+                            col.markdown(
+                                f"""
+                                <div style="
+                                    background-color: {color};
+                                    border: 2px solid #ddd;
+                                    border-radius: 8px;
+                                    padding: 10px;
+                                    margin: 5px;
+                                    text-align: center;
+                                    font-weight: bold;
+                                    cursor: help;
+                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                " title="{tooltip}">
+                                    {int(hab_id)}
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            col.markdown("")  # Celda vacía
+        
+        st.markdown("---")
+        
+        # Leyenda de colores
+        st.subheader("📋 Leyenda")
+        col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
+        
+        with col_leg1:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #FFFFFF; border: 2px solid #ddd; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Pendiente</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg2:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #4CAF50; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Completada</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg3:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #808080; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Mantenimiento</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg4:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #FFA500; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Falta suministros</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg5:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #FF4444; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Muy sucia / Ocupada</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    
+    # ===== PESTAÑA 3: CARGA DE TRABAJO POR CAMARERA =====
+    with tab_carga:
+        st.title("📊 Carga de trabajo por camarera")
+        
+        if st.session_state.asignacion_por_camarera:
             # Definir sectores
-            sectores = {
-                'Bajo (Pl 2-15)': list(range(2, 16)),
-                'Medio (Pl 16-30)': list(range(16, 31)),
-                'Alto (Pl 31-52)': list(range(31, 53))
+            sectores_carga = {
+                'Sector Bajo': list(range(2, 16)),
+                'Sector Medio': list(range(16, 31)),
+                'Sector Alto': list(range(31, 53))
             }
             
-            # Función para determinar el color de cada habitación
-            def get_room_color(hab_id):
-                if hab_id in st.session_state.habitaciones_completadas:
-                    # Buscar si tuvo incidencia
-                    for inc in st.session_state.incidencias:
-                        if inc['habitacion'] == hab_id:
-                            if inc['tipo'] == "Falta suministros":
-                                return "#FFA500"  # Naranja
-                            elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
-                                return "#FF4444"  # Rojo
-                    for mant in st.session_state.mantenimiento:
-                        if mant['habitacion'] == hab_id:
-                            return "#808080"  # Gris
-                    return "#4CAF50"  # Verde (completada sin problemas)
-                elif hab_id in st.session_state.habitaciones_standby:
-                    # Buscar el tipo de problema para el color correcto
-                    for inc in st.session_state.incidencias:
-                        if inc['habitacion'] == hab_id:
-                            if inc['tipo'] == "Falta suministros":
-                                return "#FFA500"  # Naranja
-                            elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
-                                return "#FF4444"  # Rojo
-                    return "#FFA500"  # Naranja por defecto para standby
-                return "#FFFFFF"  # Blanco (pendiente)
-            
-            # Crear pestañas por sector
-            subtab1, subtab2, subtab3 = st.tabs(["🔵 Sector Bajo", "🟡 Sector Medio", "🔴 Sector Alto"])
-            
-            for subtab, (sector_nombre, plantas) in zip([subtab1, subtab2, subtab3], sectores.items()):
-                with subtab:
-                    # Filtrar habitaciones del sector
-                    df_sector = df[df['planta'].isin(plantas)]
-                    
-                    if len(df_sector) == 0:
-                        st.info(f"No hay habitaciones en {sector_nombre}")
-                        continue
-                    
-                    # Ordenar por número de habitación
-                    df_sector = df_sector.sort_values('habitacion_id')
-                    
-                    # Crear grid de habitaciones
-                    cols_por_fila = 6
-                    habitaciones = df_sector['habitacion_id'].tolist()
-                    
-                    for i in range(0, len(habitaciones), cols_por_fila):
-                        cols = st.columns(cols_por_fila)
-                        for j, col in enumerate(cols):
-                            idx = i + j
-                            if idx < len(habitaciones):
-                                hab_id = habitaciones[idx]
-                                color = get_room_color(hab_id)
-                                
-                                # Buscar información adicional
-                                tooltip = f"Hab {hab_id}"
-                                row = df_sector[df_sector['habitacion_id'] == hab_id].iloc[0]
-                                if 'tiempo_estimado' in row:
-                                    tooltip += f"\nTiempo: {row['tiempo_estimado']} min"
-                                
-                                # Cuadrado con número de habitación
-                                col.markdown(
-                                    f"""
-                                    <div style="
-                                        background-color: {color};
-                                        border: 2px solid #ddd;
-                                        border-radius: 8px;
-                                        padding: 10px;
-                                        margin: 5px;
-                                        text-align: center;
-                                        font-weight: bold;
-                                        cursor: help;
-                                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                                    " title="{tooltip}">
-                                        {int(hab_id)}
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
-                            else:
-                                col.markdown("")  # Celda vacía
-            
-            st.markdown("---")
-            
-            # Leyenda de colores
-            st.subheader("📋 Leyenda")
-            col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
-            
-            with col_leg1:
-                st.markdown(
-                    """
-                    <div style="display: flex; align-items: center;">
-                        <div style="width: 20px; height: 20px; background-color: #FFFFFF; border: 2px solid #ddd; border-radius: 4px; margin-right: 8px;"></div>
-                        <span>Pendiente</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_leg2:
-                st.markdown(
-                    """
-                    <div style="display: flex; align-items: center;">
-                        <div style="width: 20px; height: 20px; background-color: #4CAF50; border-radius: 4px; margin-right: 8px;"></div>
-                        <span>Completada</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_leg3:
-                st.markdown(
-                    """
-                    <div style="display: flex; align-items: center;">
-                        <div style="width: 20px; height: 20px; background-color: #808080; border-radius: 4px; margin-right: 8px;"></div>
-                        <span>Mantenimiento</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_leg4:
-                st.markdown(
-                    """
-                    <div style="display: flex; align-items: center;">
-                        <div style="width: 20px; height: 20px; background-color: #FFA500; border-radius: 4px; margin-right: 8px;"></div>
-                        <span>Falta suministros</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            
-            with col_leg5:
-                st.markdown(
-                    """
-                    <div style="display: flex; align-items: center;">
-                        <div style="width: 20px; height: 20px; background-color: #FF4444; border-radius: 4px; margin-right: 8px;"></div>
-                        <span>Muy sucia / Ocupada</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-        
-        # ===== PESTAÑA 3: CARGA DE TRABAJO POR CAMARERA =====
-        with tab_carga:
-            st.title("📊 Carga de trabajo por camarera")
-            
-            if st.session_state.asignacion_por_camarera:
-                # Definir sectores
-                sectores_carga = {
-                    'Sector Bajo': list(range(2, 16)),
-                    'Sector Medio': list(range(16, 31)),
-                    'Sector Alto': list(range(31, 53))
-                }
+            # Crear gráficos por sector
+            for sector_nombre, plantas in sectores_carga.items():
+                st.markdown(f"### {sector_nombre}")
                 
-                # Crear gráficos por sector
-                for sector_nombre, plantas in sectores_carga.items():
-                    st.markdown(f"### {sector_nombre}")
+                # Filtrar camareras que trabajan en este sector
+                datos_sector = []
+                for i in range(1, st.session_state.num_camareras + 1):
+                    cam = f"Camarera {i:02d}"
+                    if cam in st.session_state.asignacion_por_camarera:
+                        df_cam = st.session_state.asignacion_por_camarera[cam]
+                        # Verificar si la camarera trabaja en este sector
+                        if any(p in plantas for p in df_cam['planta'].unique()):
+                            num_hab = len(df_cam)
+                            datos_sector.append({
+                                'Camarera': cam,
+                                'Habitaciones': num_hab
+                            })
+                
+                if datos_sector:
+                    df_carga_sector = pd.DataFrame(datos_sector)
+                    media_hab = df_carga_sector['Habitaciones'].mean()
+                    umbral_alto = media_hab * 1.2
                     
-                    # Filtrar camareras que trabajan en este sector
-                    datos_sector = []
-                    for i in range(1, st.session_state.num_camareras + 1):
-                        cam = f"Camarera {i:02d}"
-                        if cam in st.session_state.asignacion_por_camarera:
-                            df_cam = st.session_state.asignacion_por_camarera[cam]
-                            # Verificar si la camarera trabaja en este sector
-                            if any(p in plantas for p in df_cam['planta'].unique()):
-                                num_hab = len(df_cam)
-                                datos_sector.append({
-                                    'Camarera': cam,
-                                    'Habitaciones': num_hab
-                                })
+                    # Crear gráfico de barras para el sector
+                    fig = go.Figure()
                     
-                    if datos_sector:
-                        df_carga_sector = pd.DataFrame(datos_sector)
-                        media_hab = df_carga_sector['Habitaciones'].mean()
-                        umbral_alto = media_hab * 1.2
-                        
-                        # Crear gráfico de barras para el sector
-                        fig = go.Figure()
-                        
-                        for _, row in df_carga_sector.iterrows():
-                            color = '#FF4444' if row['Habitaciones'] > umbral_alto else '#1E88E5'
-                            fig.add_trace(go.Bar(
-                                x=[row['Camarera']],
-                                y=[row['Habitaciones']],
-                                name=row['Camarera'],
-                                marker_color=color,
-                                showlegend=False
-                            ))
-                        
-                        fig.add_hline(
-                            y=media_hab,
-                            line_dash="dash",
-                            line_color="blue",
-                            annotation_text=f"Media: {media_hab:.1f}",
-                            annotation_position="top right"
-                        )
-                        
-                        fig.update_layout(
-                            title=f'Carga de trabajo - {sector_nombre}',
-                            xaxis_tickangle=-45,
-                            yaxis_title="Número de habitaciones",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Mostrar camareras con sobrecarga en este sector
-                        sobrecargadas = df_carga_sector[df_carga_sector['Habitaciones'] > umbral_alto]
-                        if len(sobrecargadas) > 0:
-                            st.warning(f"⚠️ Camareras con sobrecarga en {sector_nombre}:")
-                            for _, row in sobrecargadas.iterrows():
-                                st.markdown(f"- {row['Camarera']}: {row['Habitaciones']} habitaciones")
-                    else:
-                        st.info(f"No hay camareras asignadas al sector {sector_nombre}")
+                    for _, row in df_carga_sector.iterrows():
+                        color = '#FF4444' if row['Habitaciones'] > umbral_alto else '#1E88E5'
+                        fig.add_trace(go.Bar(
+                            x=[row['Camarera']],
+                            y=[row['Habitaciones']],
+                            name=row['Camarera'],
+                            marker_color=color,
+                            showlegend=False
+                        ))
                     
-                    st.markdown("---")
-            else:
-                st.info("No hay datos de asignación disponibles")
+                    fig.add_hline(
+                        y=media_hab,
+                        line_dash="dash",
+                        line_color="blue",
+                        annotation_text=f"Media: {media_hab:.1f}",
+                        annotation_position="top right"
+                    )
+                    
+                    fig.update_layout(
+                        title=f'Carga de trabajo - {sector_nombre}',
+                        xaxis_tickangle=-45,
+                        yaxis_title="Número de habitaciones",
+                        height=400
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Mostrar camareras con sobrecarga en este sector
+                    sobrecargadas = df_carga_sector[df_carga_sector['Habitaciones'] > umbral_alto]
+                    if len(sobrecargadas) > 0:
+                        st.warning(f"⚠️ Camareras con sobrecarga en {sector_nombre}:")
+                        for _, row in sobrecargadas.iterrows():
+                            st.markdown(f"- {row['Camarera']}: {row['Habitaciones']} habitaciones")
+                else:
+                    st.info(f"No hay camareras asignadas al sector {sector_nombre}")
+                
+                st.markdown("---")
+        else:
+            st.info("No hay datos de asignación disponibles")
 
 # =============================================================================
-# VISTA CAMARERA
+# VISTA CAMARERA (solo si hay archivo cargado)
 # =============================================================================
 
-elif selected == "🧹 Camarera":
+elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
     st.title("🧹 App Camarera - Hotel Gran Bali")
     
-    if st.session_state.df_pms is None:
-        st.warning("⚠️ El gerente debe cargar el PMS primero")
-    elif not st.session_state.asignacion_por_camarera:
+    if not st.session_state.asignacion_por_camarera:
         st.warning("⚠️ No hay asignación disponible")
     else:
         if st.session_state.camarera_actual is None:
@@ -1070,103 +1299,100 @@ elif selected == "🧹 Camarera":
                         st.divider()
 
 # =============================================================================
-# VISTA CLIENTE
+# VISTA CLIENTE (solo si hay archivo cargado)
 # =============================================================================
 
-elif selected == "👤 Cliente":
+elif st.session_state.archivo_cargado and selected == "👤 Cliente":
     st.title("👤 Opinión de Clientes")
     st.caption("Comparte tu experiencia para ayudarnos a mejorar")
     
-    if st.session_state.df_pms is None:
-        st.warning("⚠️ El sistema no tiene datos de habitaciones cargados")
-    else:
-        df = st.session_state.df_pms
+    df = st.session_state.df_pms
+    
+    with st.form("formulario_opinion_cliente"):
+        col1, col2 = st.columns(2)
         
-        with st.form("formulario_opinion_cliente"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Selector de habitación
-                habitaciones_disponibles = sorted(df['habitacion_id'].tolist())
-                habitacion = st.selectbox(
-                    "Número de habitación:",
-                    habitaciones_disponibles,
-                    index=None,
-                    placeholder="Selecciona tu habitación"
-                )
-            
-            with col2:
-                st.markdown("### 📝 Tu opinión")
-                st.markdown("Con respecto a la habitación:")
-            
-            # Pregunta principal
-            st.markdown("#### ¿En qué podríamos mejorar?")
-            opinion_texto = st.text_area(
-                "Escribe tu opinión aquí:",
-                placeholder="Ej: La habitación estaba muy limpia, pero el aire acondicionado hacía ruido...",
-                height=150
+        with col1:
+            # Selector de habitación
+            habitaciones_disponibles = sorted(df['habitacion_id'].tolist())
+            habitacion = st.selectbox(
+                "Número de habitación:",
+                habitaciones_disponibles,
+                index=None,
+                placeholder="Selecciona tu habitación"
             )
-            
-            # Botón de envío
-            submitted = st.form_submit_button("📤 Enviar opinión", use_container_width=True, type="primary")
-            
-            if submitted:
-                if not habitacion:
-                    st.error("❌ Por favor, selecciona tu número de habitación")
-                elif not opinion_texto:
-                    st.error("❌ Por favor, escribe tu opinión")
-                else:
-                    # Procesar la opinión con NLP
-                    sentimiento = procesar_opinion(opinion_texto)
-                    
-                    # Guardar en el dataset
-                    actualizar_dataset(habitacion, 'opinion_cliente', opinion_texto)
-                    actualizar_dataset(habitacion, 'sentimiento_nlp', sentimiento)
-                    
-                    # Guardar en el listado de opiniones
-                    st.session_state.opiniones.append({
-                        'habitacion': habitacion,
-                        'opinion': opinion_texto,
-                        'sentimiento': sentimiento,
-                        'timestamp': datetime.now().strftime("%H:%M"),
-                        'fecha': datetime.now().strftime("%d/%m/%Y")
-                    })
-                    
-                    # Mostrar resultado
-                    st.success(f"✅ ¡Gracias por tu opinión! Sentimiento detectado: **{sentimiento}**")
-                    
-                    # Mostrar emoji según sentimiento
-                    if sentimiento == 'positivo':
-                        st.balloons()
-                    elif sentimiento == 'negativo':
-                        st.snow()
         
-        # Mostrar últimas opiniones
-        if st.session_state.opiniones:
-            st.markdown("---")
-            st.subheader("📋 Últimas opiniones recibidas")
-            
-            # Mostrar las 5 últimas opiniones
-            for op in reversed(st.session_state.opiniones[-5:]):
-                with st.container():
-                    cols = st.columns([1, 4])
-                    with cols[0]:
-                        if op['sentimiento'] == 'positivo':
-                            st.markdown("😊 **Positivo**")
-                        elif op['sentimiento'] == 'neutral':
-                            st.markdown("😐 **Neutral**")
-                        else:
-                            st.markdown("😞 **Negativo**")
-                    with cols[1]:
-                        st.markdown(f"**Hab {op['habitacion']}** - {op['timestamp']}")
-                        st.markdown(f"_{op['opinion'][:100]}...")
-                    st.divider()
+        with col2:
+            st.markdown("### 📝 Tu opinión")
+            st.markdown("Con respecto a la habitación:")
+        
+        # Pregunta principal
+        st.markdown("#### ¿En qué podríamos mejorar?")
+        opinion_texto = st.text_area(
+            "Escribe tu opinión aquí:",
+            placeholder="Ej: La habitación estaba muy limpia, pero el aire acondicionado hacía ruido...",
+            height=150
+        )
+        
+        # Botón de envío
+        submitted = st.form_submit_button("📤 Enviar opinión", use_container_width=True, type="primary")
+        
+        if submitted:
+            if not habitacion:
+                st.error("❌ Por favor, selecciona tu número de habitación")
+            elif not opinion_texto:
+                st.error("❌ Por favor, escribe tu opinión")
+            else:
+                # Procesar la opinión con NLP
+                sentimiento = procesar_opinion(opinion_texto)
+                
+                # Guardar en el dataset
+                actualizar_dataset(habitacion, 'opinion_cliente', opinion_texto)
+                actualizar_dataset(habitacion, 'sentimiento_nlp', sentimiento)
+                
+                # Guardar en el listado de opiniones
+                st.session_state.opiniones.append({
+                    'habitacion': habitacion,
+                    'opinion': opinion_texto,
+                    'sentimiento': sentimiento,
+                    'timestamp': datetime.now().strftime("%H:%M"),
+                    'fecha': datetime.now().strftime("%d/%m/%Y")
+                })
+                
+                # Mostrar resultado
+                st.success(f"✅ ¡Gracias por tu opinión! Sentimiento detectado: **{sentimiento}**")
+                
+                # Mostrar emoji según sentimiento
+                if sentimiento == 'positivo':
+                    st.balloons()
+                elif sentimiento == 'negativo':
+                    st.snow()
+    
+    # Mostrar últimas opiniones
+    if st.session_state.opiniones:
+        st.markdown("---")
+        st.subheader("📋 Últimas opiniones recibidas")
+        
+        # Mostrar las 5 últimas opiniones
+        for op in reversed(st.session_state.opiniones[-5:]):
+            with st.container():
+                cols = st.columns([1, 4])
+                with cols[0]:
+                    if op['sentimiento'] == 'positivo':
+                        st.markdown("😊 **Positivo**")
+                    elif op['sentimiento'] == 'neutral':
+                        st.markdown("😐 **Neutral**")
+                    else:
+                        st.markdown("😞 **Negativo**")
+                with cols[1]:
+                    st.markdown(f"**Hab {op['habitacion']}** - {op['timestamp']}")
+                    st.markdown(f"_{op['opinion'][:100]}...")
+                st.divider()
 
 # =============================================================================
-# VISTA INCIDENCIAS
+# VISTA INCIDENCIAS (solo si hay archivo cargado)
 # =============================================================================
 
-elif selected == "⚠️ Incidencias":
+elif st.session_state.archivo_cargado and selected == "⚠️ Incidencias":
     st.title("⚠️ Panel de Incidencias Operativas")
     st.caption("Falta suministros, Muy sucia, Ocupada, Otro")
     
@@ -1189,10 +1415,10 @@ elif selected == "⚠️ Incidencias":
         st.info("✅ No hay incidencias operativas registradas")
 
 # =============================================================================
-# VISTA MANTENIMIENTO
+# VISTA MANTENIMIENTO (solo si hay archivo cargado)
 # =============================================================================
 
-elif selected == "🔧 Mantenimiento":
+elif st.session_state.archivo_cargado and selected == "🔧 Mantenimiento":
     st.title("🔧 Panel de Mantenimiento")
     st.caption("Averías técnicas (fontanería, electricidad, etc.)")
     
@@ -1215,57 +1441,55 @@ elif selected == "🔧 Mantenimiento":
         st.info("✅ No hay averías de mantenimiento registradas")
 
 # =============================================================================
-# VISTA DATASET
+# VISTA DATASET (solo si hay archivo cargado)
 # =============================================================================
 
-elif selected == "📋 Dataset":
+elif st.session_state.archivo_cargado and selected == "📋 Dataset":
     st.title("📋 Dataset Enriquecido")
     
-    if st.session_state.df_pms is None:
-        st.warning("⚠️ Primero carga un archivo PMS")
-    else:
-        df = st.session_state.df_pms.copy()
-        
-        # Añadir opiniones al dataset (por si acaso)
-        if st.session_state.opiniones:
-            for op in st.session_state.opiniones:
-                mask = df['habitacion_id'] == op['habitacion']
-                if mask.any():
-                    df.loc[mask, 'opinion_cliente'] = op['opinion']
-                    df.loc[mask, 'sentimiento_nlp'] = op['sentimiento']
-        
-        st.subheader("📊 Métricas del dataset")
-        col_met1, col_met2, col_met3, col_met4 = st.columns(4)
-        with col_met1:
-            st.metric("Registros", len(df))
-        with col_met2:
-            st.metric("Opiniones", len([o for o in st.session_state.opiniones if o]))
-        with col_met3:
-            st.metric("Incidencias", len(st.session_state.incidencias))
-        with col_met4:
-            st.metric("Mantenimiento", len(st.session_state.mantenimiento))
-        
-        st.subheader("📋 Datos completos")
-        st.dataframe(df, use_container_width=True, height=500)
-        
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Descargar CSV enriquecido",
-            data=csv,
-            file_name=f"hotel_pms_enriquecido_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    df = st.session_state.df_pms.copy()
+    
+    # Añadir opiniones al dataset (por si acaso)
+    if st.session_state.opiniones:
+        for op in st.session_state.opiniones:
+            mask = df['habitacion_id'] == op['habitacion']
+            if mask.any():
+                df.loc[mask, 'opinion_cliente'] = op['opinion']
+                df.loc[mask, 'sentimiento_nlp'] = op['sentimiento']
+    
+    st.subheader("📊 Métricas del dataset")
+    col_met1, col_met2, col_met3, col_met4 = st.columns(4)
+    with col_met1:
+        st.metric("Registros", len(df))
+    with col_met2:
+        st.metric("Opiniones", len([o for o in st.session_state.opiniones if o]))
+    with col_met3:
+        st.metric("Incidencias", len(st.session_state.incidencias))
+    with col_met4:
+        st.metric("Mantenimiento", len(st.session_state.mantenimiento))
+    
+    st.subheader("📋 Datos completos")
+    st.dataframe(df, use_container_width=True, height=500)
+    
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Descargar CSV enriquecido",
+        data=csv,
+        file_name=f"hotel_pms_enriquecido_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
 
 # =============================================================================
-# PIE DE PÁGINA
+# PIE DE PÁGINA (solo si hay archivo cargado)
 # =============================================================================
 
-st.markdown("---")
-col_footer1, col_footer2, col_footer3 = st.columns(3)
-with col_footer1:
-    st.markdown("🏨 **Hotel Gran Bali**")
-with col_footer2:
-    st.markdown("🤖 **Sistema IA de Gestión de Limpieza**")
-with col_footer3:
-    st.markdown(f"🕒 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+if st.session_state.archivo_cargado:
+    st.markdown("---")
+    col_footer1, col_footer2, col_footer3 = st.columns(3)
+    with col_footer1:
+        st.markdown("🏨 **Hotel Gran Bali**")
+    with col_footer2:
+        st.markdown("🤖 **Sistema IA de Gestión de Limpieza**")
+    with col_footer3:
+        st.markdown(f"🕒 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
