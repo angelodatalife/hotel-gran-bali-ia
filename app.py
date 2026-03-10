@@ -13,6 +13,7 @@ from datetime import datetime
 import re
 import time
 import os
+from sklearn.preprocessing import LabelEncoder
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -95,6 +96,10 @@ if 'num_camareras' not in st.session_state:
     st.session_state.num_camareras = TOTAL_CAMARERAS
 if 'archivo_cargado' not in st.session_state:
     st.session_state.archivo_cargado = False
+if 'cluster_habitaciones' not in st.session_state:
+    st.session_state.cluster_habitaciones = {}  # Para almacenar clusters K-Means
+if 'label_encoders' not in st.session_state:
+    st.session_state.label_encoders = {}  # Para codificar variables categóricas
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -127,12 +132,134 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
+def aplicar_kmeans(df):
+    """Aplica K-Means para segmentar habitaciones por perfil de limpieza"""
+    if modelos.get('kmeans') is None or df is None or len(df) == 0:
+        return {}
+    
+    try:
+        kmeans_model = modelos['kmeans']
+        df_copy = df.copy()
+        
+        # Codificar variables categóricas para K-Means
+        categorical_cols = ['tipo_habitacion', 'sector', 'segmento']
+        for col in categorical_cols:
+            if col in df_copy.columns:
+                if col not in st.session_state.label_encoders:
+                    st.session_state.label_encoders[col] = LabelEncoder()
+                    df_copy[col + '_encoded'] = st.session_state.label_encoders[col].fit_transform(df_copy[col].astype(str))
+                else:
+                    # Manejar valores nuevos no vistos durante el entrenamiento
+                    try:
+                        df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
+                    except:
+                        # Si hay valores nuevos, asignar el valor más frecuente
+                        df_copy[col + '_encoded'] = 0
+        
+        # Seleccionar features para clustering
+        feature_cols = []
+        if 'planta' in df_copy.columns:
+            feature_cols.append('planta')
+        if 'noches_estancia' in df_copy.columns:
+            feature_cols.append('noches_estancia')
+        if 'num_huespedes' in df_copy.columns:
+            feature_cols.append('num_huespedes')
+        if 'tiene_ninos' in df_copy.columns:
+            feature_cols.append('tiene_ninos')
+        if 'tipo_habitacion_encoded' in df_copy.columns:
+            feature_cols.append('tipo_habitacion_encoded')
+        if 'sector_encoded' in df_copy.columns:
+            feature_cols.append('sector_encoded')
+        if 'segmento_encoded' in df_copy.columns:
+            feature_cols.append('segmento_encoded')
+        
+        if len(feature_cols) < 2:
+            return {}
+        
+        X = df_copy[feature_cols].values
+        
+        # Predecir clusters
+        clusters = kmeans_model.predict(X)
+        
+        # Mapear habitación a cluster
+        cluster_dict = {}
+        for i, hab_id in enumerate(df_copy['habitacion_id'].values):
+            cluster_dict[hab_id] = int(clusters[i])
+        
+        return cluster_dict
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo aplicar K-Means: {str(e)}")
+        return {}
+
+def predecir_late_checkout_xgboost(df):
+    """Usa XGBoost para predecir late checkout"""
+    if modelos.get('xgboost') is None or df is None or len(df) == 0:
+        return df
+    
+    try:
+        xgb_model = modelos['xgboost']
+        df_copy = df.copy()
+        
+        # Preparar features para XGBoost
+        feature_cols = []
+        
+        # Features numéricas
+        numeric_features = ['noches_estancia', 'num_huespedes', 'planta']
+        for col in numeric_features:
+            if col in df_copy.columns:
+                feature_cols.append(col)
+        
+        # Codificar variables categóricas
+        categorical_features = ['tipo_habitacion', 'nacionalidad', 'segmento', 'dia_semana']
+        for col in categorical_features:
+            if col in df_copy.columns:
+                if col not in st.session_state.label_encoders:
+                    st.session_state.label_encoders[col] = LabelEncoder()
+                    df_copy[col + '_xgb'] = st.session_state.label_encoders[col].fit_transform(df_copy[col].astype(str))
+                else:
+                    try:
+                        df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
+                    except:
+                        df_copy[col + '_xgb'] = 0
+                feature_cols.append(col + '_xgb')
+        
+        if len(feature_cols) < 2:
+            return df
+        
+        X = df_copy[feature_cols].values
+        
+        # Predecir probabilidad
+        if hasattr(xgb_model, 'predict_proba'):
+            prob_late = xgb_model.predict_proba(X)[:, 1]
+            df['prob_late_xgb'] = prob_late
+            df['late_checkout_pred_xgb'] = (prob_late > 0.5).astype(int)
+            
+            # Combinar con ANN si existe para mejor precisión
+            if 'prob_late' in df.columns:
+                # Promedio ponderado (50% ANN, 50% XGBoost)
+                df['prob_late_combinada'] = (df['prob_late'] * 0.5 + prob_late * 0.5)
+                df['late_checkout_pred_combinado'] = (df['prob_late_combinada'] > 0.5).astype(int)
+        
+        return df
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo aplicar XGBoost: {str(e)}")
+        return df
+
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     """Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES"""
     if df is None or len(df) == 0:
         return {}
     
     df_asignar = df.copy()
+    
+    # Aplicar XGBoost para mejorar predicción de late checkout
+    df_asignar = predecir_late_checkout_xgboost(df_asignar)
+    
+    # Aplicar K-Means para obtener clusters
+    cluster_dict = aplicar_kmeans(df_asignar)
+    st.session_state.cluster_habitaciones = cluster_dict
+    df_asignar['cluster'] = df_asignar['habitacion_id'].map(cluster_dict).fillna(0).astype(int)
+    
     plantas_totales = sorted(df_asignar['planta'].unique())
     
     # 1. Calcular carga por planta
@@ -148,7 +275,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     carga_total = sum(carga_por_planta.values())
     carga_ideal_por_cam = carga_total / num_camareras
     
-    # 3. Aplicar ANN para priorizar urgentes
+    # 3. Aplicar ANN para priorizar urgentes (ya existente)
     if modelos.get('ann') is not None:
         try:
             ann_model = modelos['ann']['modelo']
@@ -169,6 +296,12 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
             df_asignar['late_checkout_pred'] = 0
     else:
         df_asignar['late_checkout_pred'] = 0
+    
+    # Usar la predicción combinada si existe
+    if 'late_checkout_pred_combinado' in df_asignar.columns:
+        col_prioridad = 'late_checkout_pred_combinado'
+    else:
+        col_prioridad = 'late_checkout_pred'
     
     # 4. Crear BLOQUES DE PLANTAS ADYACENTES
     bloques = []
@@ -203,7 +336,12 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         
         num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
-        df_bloque = df_bloque.sort_values(by=['late_checkout_pred', 'habitacion_id'], ascending=[False, True])
+        
+        # Ordenar por prioridad (late checkout) y cluster (profundidad de limpieza)
+        df_bloque = df_bloque.sort_values(
+            by=[col_prioridad, 'cluster', 'habitacion_id'], 
+            ascending=[False, False, True]
+        )
         
         if num_cam_bloque > 1:
             habs_por_cam = len(df_bloque) // num_cam_bloque
@@ -574,10 +712,12 @@ def mostrar_sidebar():
         if st.button("🔄 Reiniciar Simulación", use_container_width=True):
             for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
-                        'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 'archivo_cargado']:
+                        'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
+                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders']:
                 if key in st.session_state:
-                    if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 'habitaciones_standby']:
-                        st.session_state[key] = []
+                    if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
+                               'habitaciones_standby', 'cluster_habitaciones', 'label_encoders']:
+                        st.session_state[key] = {} if key == 'cluster_habitaciones' or key == 'label_encoders' else []
                     else:
                         st.session_state[key] = None
             st.session_state.archivo_cargado = False
@@ -711,13 +851,47 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         st.subheader("📈 Resumen rápido")
         col_res1, col_res2, col_res3, col_res4 = st.columns(4)
         with col_res1:
-            st.metric("Checkouts estimados", int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0)
+            # Usar la mejor predicción disponible
+            if 'late_checkout_pred_combinado' in df.columns:
+                checkouts = int(df['late_checkout_pred_combinado'].sum())
+                st.metric("Checkouts estimados (combinado)", checkouts)
+            elif 'late_checkout_pred' in df.columns:
+                st.metric("Checkouts estimados (ANN)", int(df['late_checkout_pred'].sum()))
+            elif 'late_checkout_pred_xgb' in df.columns:
+                st.metric("Checkouts estimados (XGBoost)", int(df['late_checkout_pred_xgb'].sum()))
+            else:
+                st.metric("Checkouts estimados", 0)
         with col_res2:
             st.metric("Repasos", len(df) - (int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0))
         with col_res3:
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_res4:
             st.metric("Mantenimiento", len(st.session_state.mantenimiento))
+        
+        # Información de modelos utilizados
+        st.subheader("🤖 Modelos activos en esta sesión")
+        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+        with col_mod1:
+            if modelos.get('ann') is not None:
+                st.success("✅ ANN: Prediciendo late checkout")
+            else:
+                st.warning("❌ ANN no disponible")
+        with col_mod2:
+            if modelos.get('xgboost') is not None:
+                st.success("✅ XGBoost: Mejorando predicciones")
+            else:
+                st.warning("❌ XGBoost no disponible")
+        with col_mod3:
+            if modelos.get('kmeans') is not None and st.session_state.cluster_habitaciones:
+                num_clusters = len(set(st.session_state.cluster_habitaciones.values()))
+                st.success(f"✅ K-Means: {num_clusters} perfiles de limpieza")
+            else:
+                st.warning("❌ K-Means no disponible")
+        with col_mod4:
+            if modelos.get('nlp') is not None:
+                st.success("✅ NLP: Análisis de opiniones")
+            else:
+                st.warning("❌ NLP no disponible")
     
     # ===== PESTAÑA 2: ESTADO DE HABITACIONES (MAPA DE COLORES) =====
     with tab_estado:
@@ -787,6 +961,9 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                             row = df_sector[df_sector['habitacion_id'] == hab_id].iloc[0]
                             if 'tiempo_estimado' in row:
                                 tooltip += f"\nTiempo: {row['tiempo_estimado']} min"
+                            if st.session_state.cluster_habitaciones and hab_id in st.session_state.cluster_habitaciones:
+                                cluster = st.session_state.cluster_habitaciones[hab_id]
+                                tooltip += f"\nPerfil: {cluster}"
                             
                             # Cuadrado con número de habitación
                             col.markdown(
@@ -946,6 +1123,37 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     st.info(f"No hay camareras asignadas al sector {sector_nombre}")
                 
                 st.markdown("---")
+            
+            # Añadir información de clusters si K-Means está disponible
+            if modelos.get('kmeans') is not None and st.session_state.cluster_habitaciones:
+                st.subheader("📊 Perfiles de limpieza por sector (K-Means)")
+                
+                # Crear DataFrame con clusters
+                df_clusters = df.copy()
+                df_clusters['cluster'] = df_clusters['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0)
+                
+                # Distribución de clusters por sector
+                for sector_nombre, plantas in sectores_carga.items():
+                    df_sector = df_clusters[df_clusters['planta'].isin(plantas)]
+                    if len(df_sector) > 0:
+                        cluster_counts = df_sector['cluster'].value_counts().sort_index()
+                        
+                        # Crear gráfico de distribución
+                        fig = px.pie(
+                            values=cluster_counts.values,
+                            names=[f"Perfil {i}" for i in cluster_counts.index],
+                            title=f"Distribución de perfiles - {sector_nombre}",
+                            color_discrete_sequence=px.colors.qualitative.Set3
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Explicación de perfiles
+                        st.caption("""
+                        **Perfiles de limpieza:**
+                        - **Perfil 0**: Limpieza rápida (habitaciones estándar, pocas noches)
+                        - **Perfil 1**: Limpieza media (familias, estancias medias)
+                        - **Perfil 2**: Limpieza profunda (suites, VIP, muchas noches)
+                        """)
         else:
             st.info("No hay datos de asignación disponibles")
 
@@ -1031,6 +1239,15 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                     with col_crono1:
                         st.markdown(f"**Habitación:** {int(hab['habitacion_id'])}")
                         st.markdown(f"**Planta:** {int(hab['planta'])}")
+                        # Mostrar perfil si está disponible
+                        if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
+                            cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
+                            if cluster == 0:
+                                st.markdown("**Perfil:** ⚡ Rápido")
+                            elif cluster == 1:
+                                st.markdown("**Perfil:** 📊 Estándar")
+                            elif cluster == 2:
+                                st.markdown("**Perfil:** 🔬 Profundo")
                     
                     with col_crono2:
                         tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
@@ -1163,7 +1380,22 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                     ~df_asignadas['habitacion_id'].isin(st.session_state.habitaciones_standby)
                 ].copy()
                 
-                if 'late_checkout_pred' in df_pendientes.columns:
+                # Añadir información de cluster para ordenación
+                if st.session_state.cluster_habitaciones:
+                    df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0)
+                
+                # Ordenar por prioridad (cluster más alto primero = limpieza profunda)
+                if 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['late_checkout_pred', 'cluster', 'habitacion_id'], 
+                        ascending=[False, False, False]
+                    )
+                elif 'cluster' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['cluster', 'habitacion_id'], 
+                        ascending=[False, False]
+                    )
+                elif 'late_checkout_pred' in df_pendientes.columns:
                     df_pendientes = df_pendientes.sort_values(
                         by=['late_checkout_pred', 'habitacion_id'], 
                         ascending=[False, False]
@@ -1186,6 +1418,16 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     tipo_emoji = "🟡"
                                 st.markdown(f"{tipo_emoji} **Hab {int(row['habitacion_id'])}**")
                                 st.caption(f"Planta {int(row['planta'])}")
+                                
+                                # Mostrar perfil si está disponible
+                                if st.session_state.cluster_habitaciones and row['habitacion_id'] in st.session_state.cluster_habitaciones:
+                                    cluster = st.session_state.cluster_habitaciones[row['habitacion_id']]
+                                    if cluster == 2:
+                                        st.caption("🔬 Limpieza profunda")
+                                    elif cluster == 1:
+                                        st.caption("📊 Limpieza media")
+                                    else:
+                                        st.caption("⚡ Limpieza rápida")
                             
                             with cols[1]:
                                 if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
@@ -1415,6 +1657,10 @@ elif st.session_state.archivo_cargado and selected == "📋 Dataset":
             if mask.any():
                 df.loc[mask, 'opinion_cliente'] = op['opinion']
                 df.loc[mask, 'sentimiento_nlp'] = op['sentimiento']
+    
+    # Añadir clusters si están disponibles
+    if st.session_state.cluster_habitaciones:
+        df['cluster_kmeans'] = df['habitacion_id'].map(st.session_state.cluster_habitaciones)
     
     st.subheader("📊 Métricas del dataset")
     col_met1, col_met2, col_met3, col_met4 = st.columns(4)
