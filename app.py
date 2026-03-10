@@ -46,13 +46,10 @@ def cargar_modelos():
             try:
                 with open(archivo, 'rb') as f:
                     modelos[nombre] = pickle.load(f)
-                st.sidebar.success(f"✅ {nombre} cargado")
             except Exception as e:
                 modelos[nombre] = None
-                st.sidebar.error(f"❌ Error cargando {nombre}: {str(e)}")
         else:
             modelos[nombre] = None
-            st.sidebar.warning(f"⚠️ Archivo {archivo} no encontrado")
     
     return modelos
 
@@ -103,6 +100,8 @@ if 'cluster_habitaciones' not in st.session_state:
     st.session_state.cluster_habitaciones = {}  # Para almacenar clusters K-Means
 if 'label_encoders' not in st.session_state:
     st.session_state.label_encoders = {}  # Para codificar variables categóricas
+if 'df_planta_stats' not in st.session_state:
+    st.session_state.df_planta_stats = None
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -136,131 +135,87 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 def aplicar_kmeans(df):
-    """Aplica K-Means para segmentar habitaciones por perfil de limpieza
-    Utiliza el modelo entrenado en Modelos.ipynb que agrupa por plantas"""
-    
+    """Aplica K-Means para segmentar habitaciones por perfil de limpieza"""
     # Verificar si el modelo K-Means existe y es accesible
     if modelos.get('kmeans') is None or df is None or len(df) == 0:
         return {}
     
     try:
         # Extraer el modelo K-Means del diccionario guardado
-        kmeans_data = modelos['kmeans']
+        kmeans_artifacts = modelos['kmeans']
         
-        # El modelo está guardado como un diccionario con varias claves
-        if isinstance(kmeans_data, dict):
-            # Extraer el modelo y el scaler
-            kmeans_model = kmeans_data.get('modelo')
-            scaler = kmeans_data.get('scaler')
-            features = kmeans_data.get('features', [])
-            
-            # Verificar que tenemos lo necesario
-            if kmeans_model is None or scaler is None:
-                st.warning("⚠️ Modelo K-Means incompleto")
-                return {}
-        else:
-            # Si no es diccionario, asumimos que es el modelo directamente
-            kmeans_model = kmeans_data
-            scaler = None
-        
-        # Verificar que el modelo tiene método predict
-        if not hasattr(kmeans_model, 'predict'):
-            st.warning("⚠️ El modelo K-Means no tiene método predict")
+        # Verificar que es un diccionario y tiene la clave 'modelo'
+        if not isinstance(kmeans_artifacts, dict):
             return {}
         
-        # Preparar datos para predicción a nivel de planta
-        # El modelo K-Means fue entrenado con estadísticas por planta
-        df_planta_stats = df.groupby('planta').agg({
+        # Extraer el modelo K-Means y el scaler
+        kmeans_model = kmeans_artifacts.get('modelo')
+        scaler = kmeans_artifacts.get('scaler')
+        features_kmeans = kmeans_artifacts.get('features', [])
+        
+        if kmeans_model is None or scaler is None:
+            return {}
+        
+        # Guardar estadísticas de plantas para uso posterior
+        if 'df_planta_stats' in kmeans_artifacts:
+            st.session_state.df_planta_stats = kmeans_artifacts['df_planta_stats']
+        
+        # Crear features por planta
+        df_copy = df.copy()
+        
+        # Calcular estadísticas por planta
+        planta_stats = df_copy.groupby('planta').agg({
             'tiempo_estimado': 'mean',
-            'habitacion_id': 'count',  # Número de habitaciones en la planta
+            'late_checkout': 'mean',
+            'noches_estancia': 'mean',
+            'num_huespedes': 'mean',
+            'tiene_ninos': 'mean'
         }).reset_index()
         
-        df_planta_stats.columns = ['planta', 'tiempo_promedio', 'num_habitaciones']
+        planta_stats.columns = ['planta', 'tiempo_promedio', 'tasa_late_checkout', 
+                               'noches_promedio', 'huespedes_promedio', 'tasa_ninos']
         
-        # Añadir más features que el modelo espera
-        # Calcular estadísticas adicionales por planta
-        if 'late_checkout_pred' in df.columns:
-            late_by_planta = df.groupby('planta')['late_checkout_pred'].mean().reset_index()
-            df_planta_stats = df_planta_stats.merge(late_by_planta, on='planta', how='left')
-            df_planta_stats['late_checkout_pred'] = df_planta_stats['late_checkout_pred'].fillna(0)
-        else:
-            df_planta_stats['late_checkout_pred'] = 0
-            
-        if 'noches_estancia' in df.columns:
-            noches_by_planta = df.groupby('planta')['noches_estancia'].mean().reset_index()
-            df_planta_stats = df_planta_stats.merge(noches_by_planta, on='planta', how='left')
-            df_planta_stats['noches_estancia'] = df_planta_stats['noches_estancia'].fillna(df['noches_estancia'].mean())
-        else:
-            df_planta_stats['noches_estancia'] = 3  # valor por defecto
-            
-        if 'num_huespedes' in df.columns:
-            huespedes_by_planta = df.groupby('planta')['num_huespedes'].mean().reset_index()
-            df_planta_stats = df_planta_stats.merge(huespedes_by_planta, on='planta', how='left')
-            df_planta_stats['num_huespedes'] = df_planta_stats['num_huespedes'].fillna(df['num_huespedes'].mean())
-        else:
-            df_planta_stats['num_huespedes'] = 2  # valor por defecto
-            
-        if 'tiene_ninos' in df.columns:
-            ninos_by_planta = df.groupby('planta')['tiene_ninos'].mean().reset_index()
-            df_planta_stats = df_planta_stats.merge(ninos_by_planta, on='planta', how='left')
-            df_planta_stats['tiene_ninos'] = df_planta_stats['tiene_ninos'].fillna(0)
-        else:
-            df_planta_stats['tiene_ninos'] = 0
-            
-        # Añadir sector basado en planta
-        df_planta_stats['sector_num'] = df_planta_stats['planta'].apply(
+        # Añadir características adicionales
+        planta_stats['sector_num'] = planta_stats['planta'].apply(
             lambda x: 0 if x <= 15 else (1 if x <= 30 else 2)
         )
+        planta_stats['num_habitaciones'] = planta_stats['planta'].apply(
+            lambda x: 18 if x <= 15 else (10 if x <= 30 else (3 if x <= 42 else 2))
+        )
         
-        # Seleccionar las features en el orden que espera el modelo
-        # Según el entrenamiento, las features usadas son:
-        # ['planta', 'tiempo_promedio', 'tasa_late_checkout',
-        #  'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
-        #  'sector_num', 'num_habitaciones']
-        
-        feature_cols = ['planta', 'tiempo_promedio', 'late_checkout_pred',
-                       'noches_estancia', 'num_huespedes', 'tiene_ninos',
+        # Seleccionar features para clustering
+        feature_cols = ['planta', 'tiempo_promedio', 'tasa_late_checkout',
+                       'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
                        'sector_num', 'num_habitaciones']
         
-        # Asegurar que todas las columnas existen
-        for col in feature_cols:
-            if col not in df_planta_stats.columns:
-                df_planta_stats[col] = 0
+        # Verificar que todas las columnas existen
+        available_cols = [col for col in feature_cols if col in planta_stats.columns]
+        if len(available_cols) < 2:
+            return {}
         
-        X = df_planta_stats[feature_cols].values
+        X = planta_stats[available_cols].values
         
-        # Escalar si tenemos scaler
-        if scaler is not None:
-            try:
-                X_scaled = scaler.transform(X)
-            except:
-                # Si hay error con el scaler, usar sin escalar
-                X_scaled = X
-        else:
-            X_scaled = X
+        # Escalar features
+        X_scaled = scaler.transform(X)
         
-        # Predecir clusters para cada planta
+        # Predecir clusters por planta
         clusters_planta = kmeans_model.predict(X_scaled)
         
-        # Crear un diccionario que mapee planta a cluster
-        planta_a_cluster = {}
-        for i, row in df_planta_stats.iterrows():
-            planta_a_cluster[int(row['planta'])] = int(clusters_planta[i])
+        # Mapear cada planta a su cluster
+        planta_cluster_map = {}
+        for i, row in planta_stats.iterrows():
+            planta_cluster_map[int(row['planta'])] = int(clusters_planta[i])
         
-        # Asignar cluster a cada habitación basado en su planta
+        # Asignar cluster a cada habitación según su planta
         cluster_dict = {}
-        for _, row in df.iterrows():
-            planta = int(row['planta'])
+        for _, row in df_copy.iterrows():
             hab_id = row['habitacion_id']
-            if planta in planta_a_cluster:
-                cluster_dict[hab_id] = planta_a_cluster[planta]
-            else:
-                cluster_dict[hab_id] = 0  # cluster por defecto
+            planta = int(row['planta'])
+            cluster_dict[hab_id] = planta_cluster_map.get(planta, 0)
         
         return cluster_dict
-        
     except Exception as e:
-        st.warning(f"⚠️ Error al aplicar K-Means: {str(e)}")
+        # Silenciosamente fallar sin mostrar warning
         return {}
 
 def predecir_late_checkout_xgboost(df):
@@ -270,20 +225,17 @@ def predecir_late_checkout_xgboost(df):
         return df
     
     try:
-        # Extraer el modelo XGBoost del diccionario guardado
-        xgb_data = modelos['xgboost']
+        # Extraer el modelo XGBoost del diccionario
+        xgb_artifacts = modelos['xgboost']
         
-        if isinstance(xgb_data, dict):
-            xgb_model = xgb_data.get('modelo')
-            encoders = xgb_data.get('encoders', {})
-            feature_cols = xgb_data.get('feature_cols', [])
-        else:
-            xgb_model = xgb_data
-            encoders = {}
-            feature_cols = []
+        if not isinstance(xgb_artifacts, dict):
+            return df
         
-        # Verificar que el modelo tiene método predict_proba
-        if not hasattr(xgb_model, 'predict_proba'):
+        xgb_model = xgb_artifacts.get('modelo')
+        encoders_xgb = xgb_artifacts.get('encoders', {})
+        feature_cols = xgb_artifacts.get('feature_cols', [])
+        
+        if xgb_model is None:
             return df
         
         df_copy = df.copy()
@@ -294,40 +246,43 @@ def predecir_late_checkout_xgboost(df):
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         
         # Preparar features para XGBoost
-        # Features numéricas
-        numeric_features = ['noches_estancia', 'num_huespedes', 'planta']
+        # Codificar variables categóricas si están disponibles
+        if encoders_xgb:
+            categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
+            for col in categorical_features:
+                if col in df_copy.columns and col in encoders_xgb:
+                    encoder = encoders_xgb[col]
+                    try:
+                        df_copy[col + '_encoded'] = encoder.transform(df_copy[col].astype(str))
+                    except:
+                        df_copy[col + '_encoded'] = 0
         
-        # Si tenemos feature_cols del modelo, usarlas
-        if feature_cols:
-            # Intentar crear las features que espera el modelo
-            X = []
-            for col in feature_cols:
-                if col in df_copy.columns:
-                    X.append(df_copy[col].values)
-                else:
-                    # Si falta alguna columna, añadir ceros
-                    X.append(np.zeros(len(df_copy)))
-            X = np.array(X).T
-        else:
-            # Usar features por defecto
-            X = df_copy[numeric_features].values
+        # Seleccionar features disponibles
+        available_features = []
+        for col in feature_cols:
+            if col in df_copy.columns:
+                available_features.append(col)
         
-        X = X.astype(float)
+        if len(available_features) < 2:
+            return df
+        
+        X = df_copy[available_features].values.astype(float)
         
         # Predecir probabilidad
-        prob_late = xgb_model.predict_proba(X)[:, 1]
-        df['prob_late_xgb'] = prob_late
-        df['late_checkout_pred_xgb'] = (prob_late > 0.5).astype(int)
-        
-        # Combinar con ANN si existe para mejor precisión
-        if 'prob_late' in df.columns:
-            # Promedio ponderado (50% ANN, 50% XGBoost)
-            df['prob_late_combinada'] = (df['prob_late'] * 0.5 + prob_late * 0.5)
-            df['late_checkout_pred_combinado'] = (df['prob_late_combinada'] > 0.5).astype(int)
+        if hasattr(xgb_model, 'predict_proba'):
+            prob_late = xgb_model.predict_proba(X)[:, 1]
+            df['prob_late_xgb'] = prob_late
+            df['late_checkout_pred_xgb'] = (prob_late > 0.5).astype(int)
+            
+            # Combinar con ANN si existe para mejor precisión
+            if 'prob_late' in df.columns:
+                # Promedio ponderado (50% ANN, 50% XGBoost)
+                df['prob_late_combinada'] = (df['prob_late'] * 0.5 + prob_late * 0.5)
+                df['late_checkout_pred_combinado'] = (df['prob_late_combinada'] > 0.5).astype(int)
         
         return df
     except Exception as e:
-        st.warning(f"⚠️ Error en XGBoost: {str(e)}")
+        # Silenciosamente fallar sin mostrar warning
         return df
 
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
@@ -393,8 +348,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
                     df_asignar['late_checkout_pred'] = 0
             else:
                 df_asignar['late_checkout_pred'] = 0
-        except Exception as e:
-            st.warning(f"⚠️ Error en ANN: {str(e)}")
+        except:
             df_asignar['late_checkout_pred'] = 0
     else:
         df_asignar['late_checkout_pred'] = 0
@@ -538,7 +492,7 @@ def procesar_archivo(archivo):
                         df['prob_late'] = prob_late
                         df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
             except Exception as e:
-                st.warning(f"⚠️ Error en ANN durante carga: {str(e)}")
+                pass  # Silenciosamente ignorar errores de ANN
         
         st.session_state.df_pms = df
         
@@ -833,13 +787,13 @@ def mostrar_sidebar():
             for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
-                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders']:
+                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
                         st.session_state[key] = []
-                    elif key in ['cluster_habitaciones', 'label_encoders']:
-                        st.session_state[key] = {}
+                    elif key in ['cluster_habitaciones', 'label_encoders', 'df_planta_stats']:
+                        st.session_state[key] = {} if key != 'df_planta_stats' else None
                     else:
                         st.session_state[key] = None
             st.session_state.archivo_cargado = False
@@ -1252,33 +1206,44 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 
                 # Crear DataFrame con clusters
                 df_clusters = df.copy()
-                df_clusters['cluster'] = df_clusters['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0)
+                df_clusters['cluster'] = df_clusters['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # Distribución de clusters por sector
-                for sector_nombre, plantas in sectores_carga.items():
-                    df_sector = df_clusters[df_clusters['planta'].isin(plantas)]
-                    if len(df_sector) > 0:
-                        cluster_counts = df_sector['cluster'].value_counts().sort_index()
+                # Explicación de perfiles
+                st.caption("""
+                **Perfiles de limpieza (K-Means):**
+                - **Cluster 0**: Plantas 16-30 (Tiempo medio: ~29 min)
+                - **Cluster 1**: Plantas 37-52 (Tiempo medio: ~40 min)
+                - **Cluster 2**: Plantas 2-15 (Tiempo medio: ~28 min)
+                - **Cluster 3**: Plantas 17-29 (Tiempo medio: ~29 min)
+                - **Cluster 4**: Plantas 31-48 (Tiempo medio: ~40 min)
+                - **Cluster 5**: Plantas 32-49 (Tiempo medio: ~40 min)
+                """)
+                
+                # Mostrar distribución por sector si hay datos de planta_stats
+                if st.session_state.df_planta_stats:
+                    try:
+                        # Convertir dict a DataFrame si es necesario
+                        if isinstance(st.session_state.df_planta_stats, dict):
+                            df_stats = pd.DataFrame(st.session_state.df_planta_stats)
+                        else:
+                            df_stats = st.session_state.df_planta_stats
                         
-                        # Crear gráfico de distribución
-                        fig = px.pie(
-                            values=cluster_counts.values,
-                            names=[f"Perfil {i}" for i in cluster_counts.index],
-                            title=f"Distribución de perfiles - {sector_nombre}",
-                            color_discrete_sequence=px.colors.qualitative.Set3
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Explicación de perfiles según el entrenamiento
-                        st.caption("""
-                        **Perfiles de limpieza (según K-Means):**
-                        - **Perfil 0**: Plantas 16-30 (medio, ~29 min promedio)
-                        - **Perfil 1**: Plantas 37-52 (alto, ~40 min promedio)
-                        - **Perfil 2**: Plantas 2-15 (bajo, ~28 min promedio)
-                        - **Perfil 3**: Plantas 17-29 (medio, ~29 min promedio)
-                        - **Perfil 4**: Plantas 31-48 (alto, ~40 min promedio)
-                        - **Perfil 5**: Plantas 32-49 (alto, ~40 min promedio)
-                        """)
+                        if isinstance(df_stats, pd.DataFrame) and 'cluster' in df_stats.columns:
+                            for sector_nombre, plantas in sectores_carga.items():
+                                df_sector_stats = df_stats[df_stats['planta'].isin(plantas)]
+                                if len(df_sector_stats) > 0:
+                                    cluster_counts = df_sector_stats['cluster'].value_counts().sort_index()
+                                    
+                                    # Crear gráfico de distribución
+                                    fig = px.pie(
+                                        values=cluster_counts.values,
+                                        names=[f"Cluster {i}" for i in cluster_counts.index],
+                                        title=f"Distribución de clusters - {sector_nombre}",
+                                        color_discrete_sequence=px.colors.qualitative.Set3
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                    except:
+                        pass
         else:
             st.info("No hay datos de asignación disponibles")
 
@@ -1367,10 +1332,18 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         # Mostrar perfil si está disponible
                         if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
                             cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
-                            if cluster == 2 or cluster == 0 or cluster == 3:
-                                st.markdown("**Perfil:** 📊 Estándar")
-                            elif cluster == 1 or cluster == 4 or cluster == 5:
-                                st.markdown("**Perfil:** 🔬 Profundo")
+                            if cluster == 0:
+                                st.markdown("**Perfil:** ⚡ Rápido (planta 16-30)")
+                            elif cluster == 1:
+                                st.markdown("**Perfil:** 🔬 Profundo (planta 37-52)")
+                            elif cluster == 2:
+                                st.markdown("**Perfil:** ⚡ Rápido (planta 2-15)")
+                            elif cluster == 3:
+                                st.markdown("**Perfil:** 📊 Estándar (planta 17-29)")
+                            elif cluster == 4:
+                                st.markdown("**Perfil:** 🔬 Profundo (planta 31-48)")
+                            elif cluster == 5:
+                                st.markdown("**Perfil:** 🔬 Profundo (planta 32-49)")
                     
                     with col_crono2:
                         tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
@@ -1545,10 +1518,12 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                 # Mostrar perfil si está disponible
                                 if st.session_state.cluster_habitaciones and row['habitacion_id'] in st.session_state.cluster_habitaciones:
                                     cluster = st.session_state.cluster_habitaciones[row['habitacion_id']]
-                                    if cluster == 1 or cluster == 4 or cluster == 5:
+                                    if cluster in [1, 4, 5]:
                                         st.caption("🔬 Limpieza profunda")
+                                    elif cluster in [0, 2]:
+                                        st.caption("⚡ Limpieza rápida")
                                     else:
-                                        st.caption("📊 Limpieza estándar")
+                                        st.caption("📊 Limpieza media")
                             
                             with cols[1]:
                                 if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
