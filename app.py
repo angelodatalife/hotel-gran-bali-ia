@@ -352,33 +352,379 @@ with st.sidebar:
         st.rerun()
 
 # =============================================================================
-# VISTA GERENTE
+# VISTA GERENTE - CON HEATMAP Y MÉTRICAS MEJORADAS
 # =============================================================================
 
-if selected == "📊 Gerente":
+elif selected == "📊 Gerente":
     st.title("📊 Dashboard Gerente - Hotel Gran Bali")
     
-    if st.session_state.df_pms is not None:
+    if st.session_state.df_pms is None:
+        st.warning("Carga un archivo PMS desde el menú lateral")
+    else:
         df = st.session_state.df_pms
+        total_habitaciones = 446
+        habitaciones_limpiar = len(df)
+        ocupacion = (habitaciones_limpiar / total_habitaciones) * 100
+        
+        # ===== MÉTRICAS PRINCIPALES =====
         st.subheader("📊 Resumen del día")
         
-        col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
+        col_metric1, col_metric2, col_metric3, col_metric4, col_metric5 = st.columns(5)
         with col_metric1:
-            st.metric("Habitaciones", len(df))
+            st.metric("Habitaciones", habitaciones_limpiar)
         with col_metric2:
-            if 'late_checkout_pred' in df.columns:
-                checkouts = df['late_checkout_pred'].sum()
-                st.metric("Late checkout", int(checkouts))
+            # Círculo de ocupación
+            st.markdown(f"""
+            <div style="text-align: center;">
+                <div style="
+                    width: 80px;
+                    height: 80px;
+                    border-radius: 50%;
+                    background: conic-gradient(#4CAF50 0deg {ocupacion * 3.6}deg, #e0e0e0 {ocupacion * 3.6}deg 360deg);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto;
+                    font-size: 18px;
+                    font-weight: bold;
+                ">
+                    {ocupacion:.1f}%
+                </div>
+                <p style="margin-top: 5px;">Ocupación</p>
+            </div>
+            """, unsafe_allow_html=True)
         with col_metric3:
             st.metric("Camareras", "35")
         with col_metric4:
             st.metric("Stand By", len(st.session_state.habitaciones_standby))
+        with col_metric5:
+            if 'late_checkout_pred' in df.columns:
+                checkouts = df['late_checkout_pred'].sum()
+                st.metric("Late checkout", int(checkouts))
+        
+        st.markdown("---")
+        
+        # ===== HEATMAP DE HABITACIONES POR SECTOR =====
+        st.subheader("🗺️ Estado de habitaciones por sector")
+        
+        # Definir sectores
+        sectores = {
+            'Bajo': {'plantas': list(range(2, 16)), 'color': '#4CAF50', 'hab_por_planta': 18},
+            'Medio': {'plantas': list(range(16, 31)), 'color': '#FFC107', 'hab_por_planta': 10},
+            'Alto': {'plantas': list(range(31, 53)), 'color': '#DC143C', 'hab_por_planta': 3}
+        }
+        
+        # Ajustar plantas altas (43-52 tienen 2 habitaciones)
+        for planta in range(43, 53):
+            if planta in sectores['Alto']['plantas']:
+                # Ya está incluida, solo necesitamos ajustar el heatmap después
+                pass
+        
+        # Crear heatmap por sectores
+        tabs = st.tabs(["Todos", "Sector Bajo", "Sector Medio", "Sector Alto"])
+        
+        with tabs[0]:
+            st.caption("Heatmap general - Pasa el ratón para ver detalles")
+            # Crear grid de todas las habitaciones
+            cols_heatmap = st.columns(10)  # 10 columnas para mejor visualización
+            col_idx = 0
+            
+            for sector_nombre, sector_info in sectores.items():
+                for planta in sector_info['plantas']:
+                    # Determinar número de habitaciones en esta planta
+                    if sector_nombre == 'Alto' and planta >= 43:
+                        num_hab_planta = 2
+                    else:
+                        num_hab_planta = sector_info['hab_por_planta']
+                    
+                    for hab_num in range(1, num_hab_planta + 1):
+                        hab_id = planta * 100 + hab_num
+                        
+                        # Determinar estado de la habitación
+                        estado = "pendiente"
+                        color = "#f0f0f0"  # Gris claro por defecto
+                        tooltip = f"Hab {hab_id} - Pendiente"
+                        
+                        # Verificar si está en completadas
+                        if hab_id in st.session_state.habitaciones_completadas:
+                            estado = "completada"
+                            color = "#4CAF50"  # Verde
+                            tooltip = f"Hab {hab_id} - Completada"
+                        
+                        # Verificar si está en standby
+                        elif hab_id in st.session_state.habitaciones_standby:
+                            # Buscar el tipo de incidencia
+                            inc = next((i for i in st.session_state.incidencias if i['habitacion'] == hab_id), None)
+                            if inc:
+                                if inc['tipo'] == "Mantenimiento (avería)":
+                                    color = "#808080"  # Gris
+                                    tooltip = f"Hab {hab_id} - Mantenimiento"
+                                elif inc['tipo'] == "Falta suministros":
+                                    color = "#FF9800"  # Naranja
+                                    tooltip = f"Hab {hab_id} - Falta suministros"
+                                elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                                    color = "#f44336"  # Rojo
+                                    tooltip = f"Hab {hab_id} - {inc['tipo']}"
+                                else:
+                                    color = "#FFC107"  # Amarillo para otros
+                                    tooltip = f"Hab {hab_id} - {inc['tipo']}"
+                            else:
+                                color = "#FFC107"  # Amarillo por defecto
+                                tooltip = f"Hab {hab_id} - En standby"
+                        
+                        # Verificar si está en el PMS (a limpiar hoy)
+                        elif hab_id not in df['habitacion_id'].values:
+                            color = "#ffffff"  # Blanco (no se limpia hoy)
+                            tooltip = f"Hab {hab_id} - No se limpia hoy"
+                        
+                        with cols_heatmap[col_idx % 10]:
+                            st.markdown(f"""
+                            <div style="
+                                background-color: {color};
+                                width: 40px;
+                                height: 40px;
+                                border: 1px solid #ccc;
+                                border-radius: 4px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-size: 10px;
+                                margin: 2px;
+                                cursor: help;
+                                transition: transform 0.2s;
+                                title: {tooltip};
+                            " title="{tooltip}">
+                                {hab_id}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        col_idx += 1
+        
+        with tabs[1]:
+            st.caption("Sector Bajo (Plantas 2-15)")
+            cols_bajo = st.columns(9)  # 9 columnas para 18 habitaciones por planta
+            col_idx = 0
+            for planta in range(2, 16):
+                for hab_num in range(1, 19):
+                    hab_id = planta * 100 + hab_num
+                    
+                    # Determinar color (misma lógica que arriba)
+                    color = "#f0f0f0"
+                    if hab_id in st.session_state.habitaciones_completadas:
+                        color = "#4CAF50"
+                    elif hab_id in st.session_state.habitaciones_standby:
+                        inc = next((i for i in st.session_state.incidencias if i['habitacion'] == hab_id), None)
+                        if inc:
+                            if inc['tipo'] == "Mantenimiento (avería)":
+                                color = "#808080"
+                            elif inc['tipo'] == "Falta suministros":
+                                color = "#FF9800"
+                            elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                                color = "#f44336"
+                            else:
+                                color = "#FFC107"
+                    elif hab_id not in df['habitacion_id'].values:
+                        color = "#ffffff"
+                    
+                    with cols_bajo[col_idx % 9]:
+                        st.markdown(f"""
+                        <div style="
+                            background-color: {color};
+                            width: 35px;
+                            height: 35px;
+                            border: 1px solid #ccc;
+                            border-radius: 4px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 9px;
+                            margin: 2px;
+                        ">
+                            {hab_id}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    col_idx += 1
+        
+        with tabs[2]:
+            st.caption("Sector Medio (Plantas 16-30)")
+            cols_medio = st.columns(5)  # 5 columnas para 10 habitaciones por planta
+            col_idx = 0
+            for planta in range(16, 31):
+                for hab_num in range(1, 11):
+                    hab_id = planta * 100 + hab_num
+                    
+                    color = "#f0f0f0"
+                    if hab_id in st.session_state.habitaciones_completadas:
+                        color = "#4CAF50"
+                    elif hab_id in st.session_state.habitaciones_standby:
+                        inc = next((i for i in st.session_state.incidencias if i['habitacion'] == hab_id), None)
+                        if inc:
+                            if inc['tipo'] == "Mantenimiento (avería)":
+                                color = "#808080"
+                            elif inc['tipo'] == "Falta suministros":
+                                color = "#FF9800"
+                            elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                                color = "#f44336"
+                            else:
+                                color = "#FFC107"
+                    elif hab_id not in df['habitacion_id'].values:
+                        color = "#ffffff"
+                    
+                    with cols_medio[col_idx % 5]:
+                        st.markdown(f"""
+                        <div style="
+                            background-color: {color};
+                            width: 40px;
+                            height: 40px;
+                            border: 1px solid #ccc;
+                            border-radius: 4px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 10px;
+                            margin: 2px;
+                        ">
+                            {hab_id}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    col_idx += 1
+        
+        with tabs[3]:
+            st.caption("Sector Alto (Plantas 31-52)")
+            cols_alto = st.columns(3)  # 3 columnas
+            col_idx = 0
+            for planta in range(31, 53):
+                num_hab = 2 if planta >= 43 else 3
+                for hab_num in range(1, num_hab + 1):
+                    hab_id = planta * 100 + hab_num
+                    
+                    color = "#f0f0f0"
+                    if hab_id in st.session_state.habitaciones_completadas:
+                        color = "#4CAF50"
+                    elif hab_id in st.session_state.habitaciones_standby:
+                        inc = next((i for i in st.session_state.incidencias if i['habitacion'] == hab_id), None)
+                        if inc:
+                            if inc['tipo'] == "Mantenimiento (avería)":
+                                color = "#808080"
+                            elif inc['tipo'] == "Falta suministros":
+                                color = "#FF9800"
+                            elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                                color = "#f44336"
+                            else:
+                                color = "#FFC107"
+                    elif hab_id not in df['habitacion_id'].values:
+                        color = "#ffffff"
+                    
+                    with cols_alto[col_idx % 3]:
+                        st.markdown(f"""
+                        <div style="
+                            background-color: {color};
+                            width: 45px;
+                            height: 45px;
+                            border: 1px solid #ccc;
+                            border-radius: 4px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 11px;
+                            margin: 2px;
+                        ">
+                            {hab_id}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    col_idx += 1
+        
+        st.markdown("---")
+        
+        # Leyenda de colores
+        st.subheader("📖 Leyenda")
+        col_leg1, col_leg2, col_leg3, col_leg4, col_leg5, col_leg6 = st.columns(6)
+        with col_leg1:
+            st.markdown("🟩 **Verde**: Completada")
+        with col_leg2:
+            st.markdown("⬜ **Blanco**: No se limpia")
+        with col_leg3:
+            st.markdown("🟨 **Amarillo**: Pendiente")
+        with col_leg4:
+            st.markdown("🟧 **Naranja**: Falta suministros")
+        with col_leg5:
+            st.markdown("🟥 **Rojo**: Muy sucia/Ocupada")
+        with col_leg6:
+            st.markdown("⬛ **Gris**: Mantenimiento")
+        
+        st.markdown("---")
+        
+        # ===== CARGA DE TRABAJO POR CAMARERA =====
+        st.subheader("📊 Carga de trabajo por camarera")
+        
+        if st.session_state.asignacion_por_camarera:
+            datos_carga = []
+            for cam, df_cam in st.session_state.asignacion_por_camarera.items():
+                num_hab = len(df_cam)
+                # Calcular media de habitaciones por camarera
+                datos_carga.append({
+                    'Camarera': cam,
+                    'Habitaciones': num_hab
+                })
+            
+            df_carga = pd.DataFrame(datos_carga)
+            media_hab = df_carga['Habitaciones'].mean()
+            desviacion = df_carga['Habitaciones'].std()
+            umbral_alerta = media_hab + desviacion  # Camareras con carga superior a la media + desviación
+            
+            # Crear gráfico de barras
+            fig = px.bar(
+                df_carga,
+                x='Camarera',
+                y='Habitaciones',
+                title='Habitaciones asignadas por camarera',
+                color='Habitaciones',
+                color_continuous_scale=['#4CAF50', '#FFC107', '#f44336'],
+                range_color=[0, df_carga['Habitaciones'].max()]
+            )
+            
+            # Añadir línea de media
+            fig.add_hline(
+                y=media_hab,
+                line_dash="dash",
+                line_color="blue",
+                annotation_text=f"Media: {media_hab:.1f}",
+                annotation_position="top left"
+            )
+            
+            # Marcar barras con carga alta en rojo
+            for i, row in df_carga.iterrows():
+                if row['Habitaciones'] > umbral_alerta:
+                    fig.add_annotation(
+                        x=row['Camarera'],
+                        y=row['Habitaciones'],
+                        text="⚠️",
+                        showarrow=True,
+                        arrowhead=2,
+                        arrowsize=1,
+                        arrowwidth=2,
+                        arrowcolor="red"
+                    )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Mostrar estadísticas
+            col_est1, col_est2, col_est3, col_est4 = st.columns(4)
+            with col_est1:
+                st.metric("Media hab/cam", f"{media_hab:.1f}")
+            with col_est2:
+                st.metric("Mínimo", int(df_carga['Habitaciones'].min()))
+            with col_est3:
+                st.metric("Máximo", int(df_carga['Habitaciones'].max()))
+            with col_est4:
+                sobrecargadas = len(df_carga[df_carga['Habitaciones'] > umbral_alerta])
+                st.metric("Sobrecargadas", sobrecargadas, delta=None, delta_color="inverse")
+            
+            if sobrecargadas > 0:
+                st.warning(f"⚠️ {sobrecargadas} camareras tienen carga superior a la media. Considera asignar ayuda.")
         
         st.markdown("---")
         st.subheader("📋 Detalle de habitaciones")
         st.dataframe(df.head(100), use_container_width=True, height=400)
-    else:
-        st.info("Carga un archivo PMS desde el menú lateral")
 
 # =============================================================================
 # VISTA CAMARERA - CORREGIDA
