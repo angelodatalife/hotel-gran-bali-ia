@@ -277,6 +277,43 @@ def procesar_archivo(archivo):
     with st.spinner("Procesando archivo..."):
         df = pd.read_csv(archivo)
         
+        # [MODIFICACIÓN] - Estimar tiempo_estimado con XGBoost si el modelo está disponible
+        if modelos.get('xgboost') is not None:
+            try:
+                # Asumiendo que el objeto xgboost.pkl contiene un diccionario con 'modelo', 'scaler' y 'feature_cols'
+                # AJUSTA ESTO SEGÚN LA ESTRUCTURA REAL DE TU ARCHIVO
+                xgb_model = modelos['xgboost']['modelo']
+                scaler_xgb = modelos['xgboost']['scaler']
+                feature_cols = modelos['xgboost']['feature_cols']
+                
+                # Verificar que todas las columnas necesarias existen en el DataFrame cargado
+                cols_disponibles = [c for c in feature_cols if c in df.columns]
+                if len(cols_disponibles) == len(feature_cols):
+                    # Preparar los datos de entrada (X) escalándolos
+                    X_xgb = df[feature_cols].values
+                    X_xgb_scaled = scaler_xgb.transform(X_xgb)
+                    
+                    # Predecir el tiempo estimado con XGBoost
+                    # Asumiendo que es un modelo de regresión que predice minutos directamente
+                    df['tiempo_estimado'] = xgb_model.predict(X_xgb_scaled)
+                    
+                    # Redondear el tiempo estimado a 1 decimal para que sea más legible
+                    df['tiempo_estimado'] = df['tiempo_estimado'].round(1)
+                    
+                    st.info("✅ Columna 'tiempo_estimado' generada con modelo XGBoost.")
+                else:
+                    # Si faltan columnas, asignar un valor por defecto
+                    st.warning("⚠️ No se pudo aplicar XGBoost para 'tiempo_estimado'. Faltan columnas. Usando valor por defecto (30 min).")
+                    df['tiempo_estimado'] = 30.0
+            except Exception as e:
+                st.warning(f"⚠️ Error al aplicar XGBoost para 'tiempo_estimado'. Usando valor por defecto (30 min). Detalle: {e}")
+                df['tiempo_estimado'] = 30.0
+        else:
+            # Si el modelo XGBoost no está cargado, asignar un valor por defecto
+            st.warning("⚠️ Modelo XGBoost no disponible. Asignando tiempo estimado por defecto (30 min).")
+            df['tiempo_estimado'] = 30.0
+        # [END MODIFICACIÓN]
+        
         # Asegurar que existen las columnas necesarias
         columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 'sentimiento_nlp']
         for col in columnas_necesarias:
