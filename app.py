@@ -665,9 +665,9 @@ if selected == "📊 Gerente":
             if st.session_state.asignacion_por_camarera:
                 # Definir sectores
                 sectores_carga = {
-                    'Bajo': list(range(2, 16)),
-                    'Medio': list(range(16, 31)),
-                    'Alto': list(range(31, 53))
+                    'Sector Bajo': list(range(2, 16)),
+                    'Sector Medio': list(range(16, 31)),
+                    'Sector Alto': list(range(31, 53))
                 }
                 
                 # Crear gráficos por sector
