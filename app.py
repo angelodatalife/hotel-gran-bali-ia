@@ -381,7 +381,7 @@ if selected == "📊 Gerente":
         st.info("Carga un archivo PMS desde el menú lateral")
 
 # =============================================================================
-# VISTA CAMARERA
+# VISTA CAMARERA - CORREGIDA
 # =============================================================================
 
 elif selected == "🧹 Camarera":
@@ -394,13 +394,16 @@ elif selected == "🧹 Camarera":
     else:
         if st.session_state.camarera_actual is None:
             st.subheader("👤 Selecciona tu perfil")
+            
+            # Selector con dirección hacia abajo (por defecto)
             camareras = list(st.session_state.asignacion_por_camarera.keys())
             st.session_state.camarera_actual = st.selectbox(
                 "Nombre:",
                 camareras,
                 index=None,
                 placeholder="Elige tu nombre...",
-                key="select_camarera_principal"
+                key="select_camarera_principal",
+                label_visibility="collapsed"  # Oculta la label para mejor UX
             )
             
             if st.session_state.camarera_actual:
@@ -408,6 +411,9 @@ elif selected == "🧹 Camarera":
                 st.session_state.habitaciones_standby = []
                 st.rerun()
         else:
+            # Verificar si hay una limpieza en curso
+            limpieza_en_curso = st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None
+            
             # Obtener asignación de esta camarera
             df_asignadas = st.session_state.asignacion_por_camarera.get(
                 st.session_state.camarera_actual, 
@@ -427,11 +433,13 @@ elif selected == "🧹 Camarera":
                     plantas_unicas = sorted(df_asignadas['planta'].unique())
                     st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)}")
             with col_info3:
-                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal"):
+                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal", disabled=limpieza_en_curso):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
                     st.session_state.habitaciones_standby = []
                     st.rerun()
+                if limpieza_en_curso:
+                    st.caption("⚠️ Finaliza la limpieza actual para cambiar")
             with col_info4:
                 if st.session_state.habitaciones_standby:
                     st.markdown(f"**⏸️ Stand By:** {len(st.session_state.habitaciones_standby)}")
@@ -444,7 +452,7 @@ elif selected == "🧹 Camarera":
                 st.progress(progreso_total, text=f"**{completadas}/{total_asignadas}** habitaciones completadas")
             
             # ===== SECCIÓN 1: LIMPIEZA EN CURSO =====
-            if st.session_state.cronometro_activo and st.session_state.habitacion_actual is not None:
+            if limpieza_en_curso:
                 with st.container():
                     st.subheader("⏱️ Limpieza en curso")
                     
@@ -484,11 +492,8 @@ elif selected == "🧹 Camarera":
                             time.sleep(1)
                             st.rerun()
                     
-                    # Reportar problema con expander controlado
-                    expander_key = "reporte_expander"
-                    expander_open = st.session_state.get('reporte_expander_open', False)
-                    
-                    with st.expander("⚠️ Reportar problema", expanded=expander_open):
+                    # Reportar problema (solo visible durante limpieza)
+                    with st.expander("⚠️ Reportar problema", expanded=st.session_state.get('reporte_expander_open', False)):
                         tipo_reporte = st.selectbox(
                             "Tipo de problema",
                             ["Mantenimiento (avería)", "Falta suministros", "Muy sucia", "Ocupada", "Otro"],
@@ -572,7 +577,7 @@ elif selected == "🧹 Camarera":
                                     if 'tiempo_estimado' in row:
                                         st.markdown(f"⏱️ {row['tiempo_estimado']} min")
                                 with cols[3]:
-                                    if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
+                                    if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}", disabled=limpieza_en_curso):
                                         # Mover a completadas
                                         st.session_state.habitaciones_completadas.append(hab_id)
                                         st.session_state.habitaciones_standby.remove(hab_id)
@@ -621,7 +626,8 @@ elif selected == "🧹 Camarera":
                                     st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
                             
                             with cols[3]:
-                                if st.session_state.cronometro_activo:
+                                # Deshabilitar botones si hay limpieza en curso
+                                if limpieza_en_curso:
                                     st.button(
                                         f"⏸️ En curso", 
                                         key=f"btn_disabled_{row['habitacion_id']}_{i}",
