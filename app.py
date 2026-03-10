@@ -1000,7 +1000,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                     plantas_unicas = sorted(df_asignadas['planta'].unique())
                     st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)}")
             with col_info3:
-                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal", disabled=limpieza_en_curso):
+                # Botón sin parámetro disabled para evitar errores
+                if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal"):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
                     st.session_state.habitaciones_standby = []
@@ -1128,7 +1129,9 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                     st.subheader("⏸️ Stand By")
                     st.caption("Habitaciones pendientes por problemas")
                     
-                    for hab_id in st.session_state.habitaciones_standby[:]:
+                    # Crear una copia de la lista para iterar
+                    standby_list = st.session_state.habitaciones_standby.copy()
+                    for hab_id in standby_list:
                         row = df_asignadas[df_asignadas['habitacion_id'] == hab_id]
                         if len(row) > 0:
                             row = row.iloc[0]
@@ -1146,7 +1149,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     if 'tiempo_estimado' in row:
                                         st.markdown(f"⏱️ {row['tiempo_estimado']} min")
                                 with cols[3]:
-                                    if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}", disabled=limpieza_en_curso):
+                                    if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
                                         st.session_state.habitaciones_completadas.append(hab_id)
                                         st.session_state.habitaciones_standby.remove(hab_id)
@@ -1195,15 +1198,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
                             
                             with cols[3]:
-                                # Deshabilitar botones si hay limpieza en curso
-                                if limpieza_en_curso:
-                                    st.button(
-                                        f"⏸️ En curso", 
-                                        key=f"btn_disabled_{row['habitacion_id']}_{i}",
-                                        disabled=True,
-                                        use_container_width=True
-                                    )
-                                else:
+                                # Botón simple sin disabled
+                                if not limpieza_en_curso:
                                     if st.button(
                                         f"▶️ Iniciar", 
                                         key=f"btn_iniciar_{row['habitacion_id']}_{i}",
@@ -1214,6 +1210,13 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                         st.session_state.tiempo_inicio = datetime.now()
                                         st.session_state.reporte_expander_open = False
                                         st.rerun()
+                                else:
+                                    st.button(
+                                        f"⏸️ En curso", 
+                                        key=f"btn_disabled_{row['habitacion_id']}_{i}",
+                                        disabled=True,
+                                        use_container_width=True
+                                    )
                             
                             st.divider()
             
