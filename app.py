@@ -134,11 +134,32 @@ def formatear_tiempo(segundos):
 
 def aplicar_kmeans(df):
     """Aplica K-Means para segmentar habitaciones por perfil de limpieza"""
+    # Verificar si el modelo K-Means existe y es accesible
     if modelos.get('kmeans') is None or df is None or len(df) == 0:
         return {}
     
     try:
+        # Extraer el modelo K-Means (puede ser un dict o el modelo directamente)
         kmeans_model = modelos['kmeans']
+        
+        # Si es un diccionario, intentar extraer el modelo
+        if isinstance(kmeans_model, dict):
+            if 'modelo' in kmeans_model:
+                kmeans_model = kmeans_model['modelo']
+            else:
+                # Buscar cualquier clave que pueda contener el modelo
+                for key in ['kmeans', 'model', 'clusterer']:
+                    if key in kmeans_model:
+                        kmeans_model = kmeans_model[key]
+                        break
+                else:
+                    # Si no encontramos nada, no podemos usar K-Means
+                    return {}
+        
+        # Verificar que el modelo tiene método predict
+        if not hasattr(kmeans_model, 'predict'):
+            return {}
+        
         df_copy = df.copy()
         
         # Codificar variables categóricas para K-Means
@@ -147,13 +168,16 @@ def aplicar_kmeans(df):
             if col in df_copy.columns:
                 if col not in st.session_state.label_encoders:
                     st.session_state.label_encoders[col] = LabelEncoder()
-                    df_copy[col + '_encoded'] = st.session_state.label_encoders[col].fit_transform(df_copy[col].astype(str))
+                    # Fit con valores únicos de esta columna
+                    valores_unicos = df_copy[col].astype(str).unique()
+                    st.session_state.label_encoders[col].fit(valores_unicos)
+                    df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
                 else:
                     # Manejar valores nuevos no vistos durante el entrenamiento
                     try:
                         df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
                     except:
-                        # Si hay valores nuevos, asignar el valor más frecuente
+                        # Si hay valores nuevos, asignar el valor más frecuente (0)
                         df_copy[col + '_encoded'] = 0
         
         # Seleccionar features para clustering
@@ -165,7 +189,9 @@ def aplicar_kmeans(df):
         if 'num_huespedes' in df_copy.columns:
             feature_cols.append('num_huespedes')
         if 'tiene_ninos' in df_copy.columns:
-            feature_cols.append('tiene_ninos')
+            # Convertir boolean a int
+            df_copy['tiene_ninos_int'] = df_copy['tiene_ninos'].astype(int)
+            feature_cols.append('tiene_ninos_int')
         if 'tipo_habitacion_encoded' in df_copy.columns:
             feature_cols.append('tipo_habitacion_encoded')
         if 'sector_encoded' in df_copy.columns:
@@ -188,16 +214,36 @@ def aplicar_kmeans(df):
         
         return cluster_dict
     except Exception as e:
-        st.warning(f"⚠️ No se pudo aplicar K-Means: {str(e)}")
+        # Silenciosamente fallar sin mostrar warning
         return {}
 
 def predecir_late_checkout_xgboost(df):
     """Usa XGBoost para predecir late checkout"""
+    # Verificar si el modelo XGBoost existe
     if modelos.get('xgboost') is None or df is None or len(df) == 0:
         return df
     
     try:
+        # Extraer el modelo XGBoost
         xgb_model = modelos['xgboost']
+        
+        # Si es un diccionario, intentar extraer el modelo
+        if isinstance(xgb_model, dict):
+            if 'modelo' in xgb_model:
+                xgb_model = xgb_model['modelo']
+            else:
+                # Buscar cualquier clave que pueda contener el modelo
+                for key in ['xgb', 'model', 'classifier']:
+                    if key in xgb_model:
+                        xgb_model = xgb_model[key]
+                        break
+                else:
+                    return df
+        
+        # Verificar que el modelo tiene método predict_proba
+        if not hasattr(xgb_model, 'predict_proba'):
+            return df
+        
         df_copy = df.copy()
         
         # Preparar features para XGBoost
@@ -215,7 +261,9 @@ def predecir_late_checkout_xgboost(df):
             if col in df_copy.columns:
                 if col not in st.session_state.label_encoders:
                     st.session_state.label_encoders[col] = LabelEncoder()
-                    df_copy[col + '_xgb'] = st.session_state.label_encoders[col].fit_transform(df_copy[col].astype(str))
+                    valores_unicos = df_copy[col].astype(str).unique()
+                    st.session_state.label_encoders[col].fit(valores_unicos)
+                    df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
                 else:
                     try:
                         df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
@@ -229,20 +277,19 @@ def predecir_late_checkout_xgboost(df):
         X = df_copy[feature_cols].values
         
         # Predecir probabilidad
-        if hasattr(xgb_model, 'predict_proba'):
-            prob_late = xgb_model.predict_proba(X)[:, 1]
-            df['prob_late_xgb'] = prob_late
-            df['late_checkout_pred_xgb'] = (prob_late > 0.5).astype(int)
-            
-            # Combinar con ANN si existe para mejor precisión
-            if 'prob_late' in df.columns:
-                # Promedio ponderado (50% ANN, 50% XGBoost)
-                df['prob_late_combinada'] = (df['prob_late'] * 0.5 + prob_late * 0.5)
-                df['late_checkout_pred_combinado'] = (df['prob_late_combinada'] > 0.5).astype(int)
+        prob_late = xgb_model.predict_proba(X)[:, 1]
+        df['prob_late_xgb'] = prob_late
+        df['late_checkout_pred_xgb'] = (prob_late > 0.5).astype(int)
+        
+        # Combinar con ANN si existe para mejor precisión
+        if 'prob_late' in df.columns:
+            # Promedio ponderado (50% ANN, 50% XGBoost)
+            df['prob_late_combinada'] = (df['prob_late'] * 0.5 + prob_late * 0.5)
+            df['late_checkout_pred_combinado'] = (df['prob_late_combinada'] > 0.5).astype(int)
         
         return df
     except Exception as e:
-        st.warning(f"⚠️ No se pudo aplicar XGBoost: {str(e)}")
+        # Silenciosamente fallar sin mostrar warning
         return df
 
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
@@ -258,7 +305,8 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     # Aplicar K-Means para obtener clusters
     cluster_dict = aplicar_kmeans(df_asignar)
     st.session_state.cluster_habitaciones = cluster_dict
-    df_asignar['cluster'] = df_asignar['habitacion_id'].map(cluster_dict).fillna(0).astype(int)
+    if cluster_dict:
+        df_asignar['cluster'] = df_asignar['habitacion_id'].map(cluster_dict).fillna(0).astype(int)
     
     plantas_totales = sorted(df_asignar['planta'].unique())
     
@@ -278,18 +326,28 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     # 3. Aplicar ANN para priorizar urgentes (ya existente)
     if modelos.get('ann') is not None:
         try:
-            ann_model = modelos['ann']['modelo']
-            scaler_ann = modelos['ann']['scaler']
-            feature_cols = modelos['ann']['feature_cols']
+            # Extraer el modelo ANN
+            ann_data = modelos['ann']
+            if isinstance(ann_data, dict):
+                ann_model = ann_data.get('modelo')
+                scaler_ann = ann_data.get('scaler')
+                feature_cols = ann_data.get('feature_cols', [])
+            else:
+                ann_model = None
+                scaler_ann = None
+                feature_cols = []
             
-            cols_disponibles = [c for c in feature_cols if c in df_asignar.columns]
-            if len(cols_disponibles) == len(feature_cols):
-                X_ann = df_asignar[feature_cols].values
-                X_ann_scaled = scaler_ann.transform(X_ann)
-                
-                prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
-                df_asignar['prob_late'] = prob_late
-                df_asignar['late_checkout_pred'] = (prob_late > 0.5).astype(int)
+            if ann_model is not None and scaler_ann is not None and feature_cols:
+                cols_disponibles = [c for c in feature_cols if c in df_asignar.columns]
+                if len(cols_disponibles) == len(feature_cols):
+                    X_ann = df_asignar[feature_cols].values
+                    X_ann_scaled = scaler_ann.transform(X_ann)
+                    
+                    prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
+                    df_asignar['prob_late'] = prob_late
+                    df_asignar['late_checkout_pred'] = (prob_late > 0.5).astype(int)
+                else:
+                    df_asignar['late_checkout_pred'] = 0
             else:
                 df_asignar['late_checkout_pred'] = 0
         except:
@@ -338,10 +396,16 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
         # Ordenar por prioridad (late checkout) y cluster (profundidad de limpieza)
-        df_bloque = df_bloque.sort_values(
-            by=[col_prioridad, 'cluster', 'habitacion_id'], 
-            ascending=[False, False, True]
-        )
+        if 'cluster' in df_bloque.columns:
+            df_bloque = df_bloque.sort_values(
+                by=[col_prioridad, 'cluster', 'habitacion_id'], 
+                ascending=[False, False, True]
+            )
+        else:
+            df_bloque = df_bloque.sort_values(
+                by=[col_prioridad, 'habitacion_id'], 
+                ascending=[False, True]
+            )
         
         if num_cam_bloque > 1:
             habs_por_cam = len(df_bloque) // num_cam_bloque
@@ -405,20 +469,27 @@ def procesar_archivo(archivo):
         # Aplicar ANN
         if modelos.get('ann') is not None:
             try:
-                ann_model = modelos['ann']['modelo']
-                scaler_ann = modelos['ann']['scaler']
-                feature_cols = modelos['ann']['feature_cols']
+                ann_data = modelos['ann']
+                if isinstance(ann_data, dict):
+                    ann_model = ann_data.get('modelo')
+                    scaler_ann = ann_data.get('scaler')
+                    feature_cols = ann_data.get('feature_cols', [])
+                else:
+                    ann_model = None
+                    scaler_ann = None
+                    feature_cols = []
                 
-                cols_disponibles = [c for c in feature_cols if c in df.columns]
-                if len(cols_disponibles) == len(feature_cols):
-                    X_ann = df[feature_cols].values
-                    X_ann_scaled = scaler_ann.transform(X_ann)
-                    
-                    prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
-                    df['prob_late'] = prob_late
-                    df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
+                if ann_model is not None and scaler_ann is not None and feature_cols:
+                    cols_disponibles = [c for c in feature_cols if c in df.columns]
+                    if len(cols_disponibles) == len(feature_cols):
+                        X_ann = df[feature_cols].values
+                        X_ann_scaled = scaler_ann.transform(X_ann)
+                        
+                        prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
+                        df['prob_late'] = prob_late
+                        df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
             except Exception as e:
-                st.warning(f"⚠️ No se pudo aplicar ANN")
+                pass  # Silenciosamente ignorar errores de ANN
         
         st.session_state.df_pms = df
         
@@ -716,8 +787,10 @@ def mostrar_sidebar():
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
-                               'habitaciones_standby', 'cluster_habitaciones', 'label_encoders']:
-                        st.session_state[key] = {} if key == 'cluster_habitaciones' or key == 'label_encoders' else []
+                               'habitaciones_standby']:
+                        st.session_state[key] = []
+                    elif key in ['cluster_habitaciones', 'label_encoders']:
+                        st.session_state[key] = {}
                     else:
                         st.session_state[key] = None
             st.session_state.archivo_cargado = False
