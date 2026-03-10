@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con pantalla de inicio centralizada y estética mejorada
+# Versión con pantalla de inicio centralizada y diseño mejorado
 # =============================================================================
 
 import streamlit as st
@@ -298,7 +298,7 @@ def procesar_archivo(archivo):
 # =============================================================================
 
 def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio centralizada con mejor estética"""
+    """Muestra la pantalla de inicio centralizada con diseño limpio"""
     
     # Espaciado superior para centrar verticalmente
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -306,48 +306,28 @@ def mostrar_pantalla_inicio():
     # Título principal
     st.markdown(
         """
-        <h1 style='text-align: center; color: #1E88E5; font-size: 48px; margin-bottom: 10px;'>🏨 Hotel Gran Bali</h1>
-        <h3 style='text-align: center; color: #666; font-weight: 300; margin-bottom: 40px;'>Sistema de Gestión IA de Limpieza</h3>
+        <h1 style='text-align: center; color: #1E88E5; font-size: 3rem; margin-bottom: 0.5rem;'>🏨 Hotel Gran Bali</h1>
+        <h3 style='text-align: center; color: #666; font-weight: 300; margin-top: 0;'>Sistema de Gestión IA de Limpieza</h3>
+        <br><br>
         """,
         unsafe_allow_html=True
     )
     
-    # Contenedor principal centrado
-    col_central = st.columns([1, 3, 1])[1]
+    # Contenedor central
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    with col_central:
-        # Caja de carga con estilo mejorado
+    with col2:
+        # Título de carga
         st.markdown(
             """
-            <div style="
-                border: 3px dashed #1E88E5;
-                border-radius: 20px;
-                padding: 30px 20px;
-                text-align: center;
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-                margin-bottom: 30px;
-            ">
-                <h2 style="color: #1E88E5; margin-bottom: 20px; font-size: 32px;">📂 Cargar PMS</h2>
-                <p style="font-size: 18px; color: #666; margin-bottom: 15px;">Arrastra tu archivo CSV aquí</p>
-                <div style="
-                    background-color: white;
-                    border-radius: 10px;
-                    padding: 20px;
-                    border: 2px dashed #ccc;
-                    margin: 15px 0;
-                ">
-                    <span style="font-size: 16px; color: #999;">⬆️ Arrastra y suelta o haz clic para buscar</span>
-                </div>
-                <p style="color: #999; font-size: 14px; margin-top: 10px;">Limit 200MB por archivo • CSV</p>
-            </div>
+            <h2 style='text-align: center; color: #333; margin-bottom: 1.5rem;'>📂 Cargar PMS</h2>
             """,
             unsafe_allow_html=True
         )
         
-        # File uploader de Streamlit (oculto visualmente pero funcional)
+        # File uploader de Streamlit (estilizado)
         archivo = st.file_uploader(
-            "Selecciona archivo CSV",
+            "Arrastra tu archivo CSV aquí",
             type=['csv'],
             key="file_uploader_inicio",
             label_visibility="collapsed"
@@ -355,33 +335,27 @@ def mostrar_pantalla_inicio():
         
         if archivo is not None:
             procesar_archivo(archivo)
-    
-    # Contenedor para modelos (debajo de la caja de carga)
-    col_modelos = st.columns([1, 3, 1])[1]
-    
-    with col_modelos:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center; color: #666;'>🤖 Modelos cargados</h3>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
         
-        # Mostrar modelos en una fila horizontal
-        cols = st.columns(4)
+        st.markdown("<br><br>", unsafe_allow_html=True)
         
-        with cols[0]:
+        # Título de modelos
+        st.markdown(
+            """
+            <h3 style='text-align: center; color: #666; margin-bottom: 1.5rem; font-weight: 400;'>🤖 Modelos cargados</h3>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Mostrar modelos en una sola línea con íconos pequeños
+        col_mod1, col_mod2, col_mod3, col_mod4, col_mod5 = st.columns([1, 1, 1, 1, 1])
+        
+        with col_mod1:
             if modelos.get('ann') is not None:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #4CAF50;
-                        box-shadow: 0 5px 15px rgba(76,175,80,0.2);
-                    ">
-                        <span style="font-size: 32px;">🧠</span>
-                        <h4 style="color: #2E7D32; margin: 10px 0 0 0;">ANN</h4>
-                        <p style="color: #2E7D32; margin: 0; font-size: 14px;">Red Neuronal</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">✅</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">ANN</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -389,37 +363,21 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #ffebee, #ffcdd2);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #f44336;
-                        box-shadow: 0 5px 15px rgba(244,67,54,0.2);
-                    ">
-                        <span style="font-size: 32px;">🧠</span>
-                        <h4 style="color: #C62828; margin: 10px 0 0 0;">ANN</h4>
-                        <p style="color: #C62828; margin: 0; font-size: 14px;">No disponible</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">❌</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">ANN</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
         
-        with cols[1]:
+        with col_mod2:
             if modelos.get('xgboost') is not None:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #4CAF50;
-                        box-shadow: 0 5px 15px rgba(76,175,80,0.2);
-                    ">
-                        <span style="font-size: 32px;">🌳</span>
-                        <h4 style="color: #2E7D32; margin: 10px 0 0 0;">XGBoost</h4>
-                        <p style="color: #2E7D32; margin: 0; font-size: 14px;">Gradient Boosting</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">✅</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">XGBoost</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -427,37 +385,21 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #ffebee, #ffcdd2);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #f44336;
-                        box-shadow: 0 5px 15px rgba(244,67,54,0.2);
-                    ">
-                        <span style="font-size: 32px;">🌳</span>
-                        <h4 style="color: #C62828; margin: 10px 0 0 0;">XGBoost</h4>
-                        <p style="color: #C62828; margin: 0; font-size: 14px;">No disponible</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">❌</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">XGBoost</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
         
-        with cols[2]:
+        with col_mod3:
             if modelos.get('kmeans') is not None:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #4CAF50;
-                        box-shadow: 0 5px 15px rgba(76,175,80,0.2);
-                    ">
-                        <span style="font-size: 32px;">📊</span>
-                        <h4 style="color: #2E7D32; margin: 10px 0 0 0;">K-Means</h4>
-                        <p style="color: #2E7D32; margin: 0; font-size: 14px;">Clustering</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">✅</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">K-Means</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -465,37 +407,21 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #ffebee, #ffcdd2);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #f44336;
-                        box-shadow: 0 5px 15px rgba(244,67,54,0.2);
-                    ">
-                        <span style="font-size: 32px;">📊</span>
-                        <h4 style="color: #C62828; margin: 10px 0 0 0;">K-Means</h4>
-                        <p style="color: #C62828; margin: 0; font-size: 14px;">No disponible</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">❌</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">K-Means</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
         
-        with cols[3]:
+        with col_mod4:
             if modelos.get('nlp') is not None:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #4CAF50;
-                        box-shadow: 0 5px 15px rgba(76,175,80,0.2);
-                    ">
-                        <span style="font-size: 32px;">📝</span>
-                        <h4 style="color: #2E7D32; margin: 10px 0 0 0;">NLP</h4>
-                        <p style="color: #2E7D32; margin: 0; font-size: 14px;">Análisis de texto</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">✅</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">NLP</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -503,21 +429,17 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="
-                        background: linear-gradient(135deg, #ffebee, #ffcdd2);
-                        border-radius: 15px;
-                        padding: 20px 10px;
-                        text-align: center;
-                        border: 2px solid #f44336;
-                        box-shadow: 0 5px 15px rgba(244,67,54,0.2);
-                    ">
-                        <span style="font-size: 32px;">📝</span>
-                        <h4 style="color: #C62828; margin: 10px 0 0 0;">NLP</h4>
-                        <p style="color: #C62828; margin: 0; font-size: 14px;">No disponible</p>
+                    <div style="text-align: center;">
+                        <span style="font-size: 1.2rem;">❌</span><br>
+                        <span style="font-size: 0.9rem; color: #333;">NLP</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
+        
+        with col_mod5:
+            # Columna vacía para equilibrar
+            st.markdown("")
         
         st.markdown("<br><br>", unsafe_allow_html=True)
 
