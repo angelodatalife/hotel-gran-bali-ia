@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con mejoras en la vista Gerente
+# Versión con mejoras en la vista Gerente (3 pestañas internas)
 # =============================================================================
 
 import streamlit as st
@@ -380,118 +380,136 @@ with st.sidebar:
         st.rerun()
 
 # =============================================================================
-# VISTA GERENTE
+# VISTA GERENTE - CON 3 PESTAÑAS INTERNAS
 # =============================================================================
 
 if selected == "📊 Gerente":
-    st.title("📊 Dashboard Gerente - Hotel Gran Bali")
     
     if st.session_state.df_pms is None:
         st.warning("⚠️ Carga un archivo PMS desde el menú lateral")
     else:
         df = st.session_state.df_pms
         
-        # ===== MÉTRICAS PRINCIPALES EN CÍRCULOS =====
-        col_metric1, col_metric2, col_metric3 = st.columns(3)
+        # Crear las 3 pestañas internas
+        tab_dashboard, tab_estado, tab_carga = st.tabs(["📊 Dashboard Gerente", "🗺️ Estado de Habitaciones", "📊 Carga de trabajo por camarera"])
         
-        with col_metric1:
-            ocupacion = len(df) / TOTAL_HABITACIONES * 100
-            st.markdown(
-                f"""
-                <div style="
-                    width: 150px;
-                    height: 150px;
-                    border-radius: 50%;
-                    border: 4px solid #1E88E5;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    margin: 0 auto;
-                    background: transparent;
-                ">
-                    <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
-                    <div style="font-size: 16px;">Ocupación</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        # ===== PESTAÑA 1: DASHBOARD GERENTE (CÍRCULOS Y CONTROLES) =====
+        with tab_dashboard:
+            st.title("📊 Dashboard Gerente - Hotel Gran Bali")
+            
+            # Métricas principales en círculos
+            col_metric1, col_metric2, col_metric3 = st.columns(3)
+            
+            with col_metric1:
+                ocupacion = len(df) / TOTAL_HABITACIONES * 100
+                st.markdown(
+                    f"""
+                    <div style="
+                        width: 150px;
+                        height: 150px;
+                        border-radius: 50%;
+                        border: 4px solid #1E88E5;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto;
+                        background: transparent;
+                    ">
+                        <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
+                        <div style="font-size: 16px;">Ocupación</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with col_metric2:
+                habitaciones_hechas = len(st.session_state.habitaciones_completadas)
+                st.markdown(
+                    f"""
+                    <div style="
+                        width: 150px;
+                        height: 150px;
+                        border-radius: 50%;
+                        border: 4px solid #4CAF50;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto;
+                        background: transparent;
+                    ">
+                        <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
+                        <div style="font-size: 16px;">Habitaciones</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with col_metric3:
+                st.markdown(
+                    f"""
+                    <div style="
+                        width: 150px;
+                        height: 150px;
+                        border-radius: 50%;
+                        border: 4px solid #FFA500;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto;
+                        background: transparent;
+                    ">
+                        <div style="font-size: 32px; font-weight: bold;">{st.session_state.num_camareras}</div>
+                        <div style="font-size: 16px;">Camareras</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            # Selector de número de camareras
+            col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
+            with col_control2:
+                st.markdown("### Ajustar personal")
+                col_plus, col_num, col_minus = st.columns([1, 2, 1])
+                with col_plus:
+                    if st.button("➕", key="btn_plus"):
+                        st.session_state.num_camareras = min(50, st.session_state.num_camareras + 1)
+                        st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
+                            st.session_state.df_pms, 
+                            st.session_state.num_camareras
+                        )
+                        st.rerun()
+                with col_num:
+                    st.markdown(f"<h2 style='text-align: center;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
+                with col_minus:
+                    if st.button("➖", key="btn_minus"):
+                        st.session_state.num_camareras = max(1, st.session_state.num_camareras - 1)
+                        st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
+                            st.session_state.df_pms, 
+                            st.session_state.num_camareras
+                        )
+                        st.rerun()
+            
+            st.markdown("---")
+            
+            # Información adicional (opcional)
+            st.subheader("📈 Resumen rápido")
+            col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+            with col_res1:
+                st.metric("Checkouts estimados", int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0)
+            with col_res2:
+                st.metric("Repasos", len(df) - (int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0))
+            with col_res3:
+                st.metric("Incidencias", len(st.session_state.incidencias))
+            with col_res4:
+                st.metric("Mantenimiento", len(st.session_state.mantenimiento))
         
-        with col_metric2:
-            habitaciones_hechas = len(st.session_state.habitaciones_completadas)
-            st.markdown(
-                f"""
-                <div style="
-                    width: 150px;
-                    height: 150px;
-                    border-radius: 50%;
-                    border: 4px solid #4CAF50;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    margin: 0 auto;
-                    background: transparent;
-                ">
-                    <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
-                    <div style="font-size: 16px;">Habitaciones</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        with col_metric3:
-            st.markdown(
-                f"""
-                <div style="
-                    width: 150px;
-                    height: 150px;
-                    border-radius: 50%;
-                    border: 4px solid #FFA500;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    margin: 0 auto;
-                    background: transparent;
-                ">
-                    <div style="font-size: 32px; font-weight: bold;">{st.session_state.num_camareras}</div>
-                    <div style="font-size: 16px;">Camareras</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        # Selector de número de camareras
-        col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
-        with col_control2:
-            st.markdown("### Ajustar personal")
-            col_plus, col_num, col_minus = st.columns([1, 2, 1])
-            with col_plus:
-                if st.button("➕", key="btn_plus"):
-                    st.session_state.num_camareras = min(50, st.session_state.num_camareras + 1)
-                    st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
-                        st.session_state.df_pms, 
-                        st.session_state.num_camareras
-                    )
-                    st.rerun()
-            with col_num:
-                st.markdown(f"<h2 style='text-align: center;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
-            with col_minus:
-                if st.button("➖", key="btn_minus"):
-                    st.session_state.num_camareras = max(1, st.session_state.num_camareras - 1)
-                    st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
-                        st.session_state.df_pms, 
-                        st.session_state.num_camareras
-                    )
-                    st.rerun()
-        
-        st.markdown("---")
-        
-        # ===== PESTAÑAS PARA ESTADO DE HABITACIONES Y CARGA DE TRABAJO =====
-        tab_estado, tab_carga = st.tabs(["🗺️ Estado de Habitaciones", "📊 Carga de trabajo por camarera"])
-        
+        # ===== PESTAÑA 2: ESTADO DE HABITACIONES (MAPA DE COLORES) =====
         with tab_estado:
+            st.title("🗺️ Estado de Habitaciones")
+            
             # Definir sectores
             sectores = {
                 'Bajo (Pl 2-15)': list(range(2, 16)),
@@ -581,7 +599,7 @@ if selected == "📊 Gerente":
             
             st.markdown("---")
             
-            # ===== LEYENDA DE COLORES =====
+            # Leyenda de colores
             st.subheader("📋 Leyenda")
             col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
             
@@ -640,9 +658,9 @@ if selected == "📊 Gerente":
                     unsafe_allow_html=True
                 )
         
+        # ===== PESTAÑA 3: CARGA DE TRABAJO POR CAMARERA =====
         with tab_carga:
-            # ===== CARGA DE TRABAJO POR CAMARERA (DIVIDIDA POR SECTORES) =====
-            st.subheader("📊 Carga de trabajo por camarera")
+            st.title("📊 Carga de trabajo por camarera")
             
             if st.session_state.asignacion_por_camarera:
                 # Definir sectores
@@ -715,6 +733,8 @@ if selected == "📊 Gerente":
                         st.info(f"No hay camareras asignadas al sector {sector_nombre}")
                     
                     st.markdown("---")
+            else:
+                st.info("No hay datos de asignación disponibles")
 
 # =============================================================================
 # VISTA CAMARERA
