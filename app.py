@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con mejoras UI y correcciones
+# Versión completa con todas las funcionalidades
 # =============================================================================
 
 import streamlit as st
@@ -82,6 +82,8 @@ if 'habitaciones_standby' not in st.session_state:
     st.session_state.habitaciones_standby = []  # Lista de IDs en Stand By
 if 'reporte_expander_open' not in st.session_state:
     st.session_state.reporte_expander_open = False
+if 'selected_page' not in st.session_state:
+    st.session_state.selected_page = "📊 Gerente"
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -270,9 +272,6 @@ with st.sidebar:
         st.markdown("")
     
     # Determinar la página seleccionada
-    if 'selected_page' not in st.session_state:
-        st.session_state.selected_page = "📊 Gerente"
-    
     if gerente_selected:
         st.session_state.selected_page = "📊 Gerente"
     elif camarera_selected:
@@ -352,7 +351,7 @@ with st.sidebar:
         st.rerun()
 
 # =============================================================================
-# VISTA GERENTE - CON HEATMAP, OCUPACIÓN Y CARGA DE TRABAJO
+# VISTA GERENTE
 # =============================================================================
 
 if selected == "📊 Gerente":
@@ -424,6 +423,8 @@ if selected == "📊 Gerente":
                     if mant['habitacion'] == hab_id:
                         return "#808080"  # Gris
                 return "#4CAF50"  # Verde (completada sin problemas)
+            elif hab_id in st.session_state.habitaciones_standby:
+                return "#FFA500"  # Naranja para standby también
             return "#FFFFFF"  # Blanco (pendiente)
         
         # Crear pestañas por sector
@@ -562,15 +563,18 @@ if selected == "📊 Gerente":
             umbral_alto = media_hab * 1.2  # 20% por encima de la media
             
             # Crear gráfico de barras
-            fig = px.bar(
-                df_carga,
-                x='Camarera',
-                y='Habitaciones',
-                title='Habitaciones asignadas por camarera',
-                color='Habitaciones',
-                color_continuous_scale=['#4CAF50', '#FFC107', '#FF4444'],
-                range_color=[0, df_carga['Habitaciones'].max()]
-            )
+            fig = go.Figure()
+            
+            # Añadir barras una por una para colores personalizados
+            for _, row in df_carga.iterrows():
+                color = '#FF4444' if row['Habitaciones'] > umbral_alto else '#1E88E5'
+                fig.add_trace(go.Bar(
+                    x=[row['Camarera']],
+                    y=[row['Habitaciones']],
+                    name=row['Camarera'],
+                    marker_color=color,
+                    showlegend=False
+                ))
             
             # Añadir línea de media
             fig.add_hline(
@@ -581,20 +585,11 @@ if selected == "📊 Gerente":
                 annotation_position="top right"
             )
             
-            # Marcar en rojo las que superan el umbral
-            colores_barras = []
-            for hab in df_carga['Habitaciones']:
-                if hab > umbral_alto:
-                    colores_barras.append('#FF4444')
-                else:
-                    colores_barras.append('#1E88E5')
-            
-            fig.update_traces(marker_color=colores_barras)
-            
             fig.update_layout(
+                title='Habitaciones asignadas por camarera',
                 xaxis_tickangle=-45,
                 yaxis_title="Número de habitaciones",
-                showlegend=False
+                height=500
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -652,7 +647,7 @@ if selected == "📊 Gerente":
         )
 
 # =============================================================================
-# VISTA CAMARERA - CORREGIDA
+# VISTA CAMARERA
 # =============================================================================
 
 elif selected == "🧹 Camarera":
@@ -666,7 +661,7 @@ elif selected == "🧹 Camarera":
         if st.session_state.camarera_actual is None:
             st.subheader("👤 Selecciona tu perfil")
             
-            # Selector con dirección hacia abajo (por defecto)
+            # Selector con dirección hacia abajo
             camareras = list(st.session_state.asignacion_por_camarera.keys())
             st.session_state.camarera_actual = st.selectbox(
                 "Nombre:",
@@ -674,7 +669,7 @@ elif selected == "🧹 Camarera":
                 index=None,
                 placeholder="Elige tu nombre...",
                 key="select_camarera_principal",
-                label_visibility="collapsed"  # Oculta la label para mejor UX
+                label_visibility="collapsed"
             )
             
             if st.session_state.camarera_actual:
@@ -763,7 +758,7 @@ elif selected == "🧹 Camarera":
                             time.sleep(1)
                             st.rerun()
                     
-                    # Reportar problema (solo visible durante limpieza)
+                    # Reportar problema
                     with st.expander("⚠️ Reportar problema", expanded=st.session_state.get('reporte_expander_open', False)):
                         tipo_reporte = st.selectbox(
                             "Tipo de problema",
@@ -957,7 +952,7 @@ elif selected == "🧹 Camarera":
                         st.divider()
 
 # =============================================================================
-# VISTA INCIDENCIAS (operativas)
+# VISTA INCIDENCIAS
 # =============================================================================
 
 elif selected == "⚠️ Incidencias":
@@ -983,7 +978,7 @@ elif selected == "⚠️ Incidencias":
         st.info("✅ No hay incidencias operativas registradas")
 
 # =============================================================================
-# VISTA MANTENIMIENTO (averías técnicas)
+# VISTA MANTENIMIENTO
 # =============================================================================
 
 elif selected == "🔧 Mantenimiento":
