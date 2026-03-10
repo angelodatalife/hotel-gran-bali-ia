@@ -162,20 +162,32 @@ def aplicar_kmeans(df):
         
         df_copy = df.copy()
         
+        # Limpiar valores NaN
+        for col in ['planta', 'noches_estancia', 'num_huespedes', 'tiene_ninos']:
+            if col in df_copy.columns:
+                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
+        
+        # Convertir tiene_ninos a int si existe
+        if 'tiene_ninos' in df_copy.columns:
+            df_copy['tiene_ninos'] = df_copy['tiene_ninos'].astype(int)
+        
         # Codificar variables categóricas para K-Means
         categorical_cols = ['tipo_habitacion', 'sector', 'segmento']
         for col in categorical_cols:
             if col in df_copy.columns:
+                # Rellenar NaN con un valor por defecto
+                df_copy[col] = df_copy[col].fillna('desconocido').astype(str)
+                
                 if col not in st.session_state.label_encoders:
                     st.session_state.label_encoders[col] = LabelEncoder()
                     # Fit con valores únicos de esta columna
-                    valores_unicos = df_copy[col].astype(str).unique()
+                    valores_unicos = df_copy[col].unique()
                     st.session_state.label_encoders[col].fit(valores_unicos)
-                    df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
+                    df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col])
                 else:
                     # Manejar valores nuevos no vistos durante el entrenamiento
                     try:
-                        df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
+                        df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col])
                     except:
                         # Si hay valores nuevos, asignar el valor más frecuente (0)
                         df_copy[col + '_encoded'] = 0
@@ -189,9 +201,7 @@ def aplicar_kmeans(df):
         if 'num_huespedes' in df_copy.columns:
             feature_cols.append('num_huespedes')
         if 'tiene_ninos' in df_copy.columns:
-            # Convertir boolean a int
-            df_copy['tiene_ninos_int'] = df_copy['tiene_ninos'].astype(int)
-            feature_cols.append('tiene_ninos_int')
+            feature_cols.append('tiene_ninos')
         if 'tipo_habitacion_encoded' in df_copy.columns:
             feature_cols.append('tipo_habitacion_encoded')
         if 'sector_encoded' in df_copy.columns:
@@ -202,7 +212,7 @@ def aplicar_kmeans(df):
         if len(feature_cols) < 2:
             return {}
         
-        X = df_copy[feature_cols].values
+        X = df_copy[feature_cols].values.astype(float)
         
         # Predecir clusters
         clusters = kmeans_model.predict(X)
@@ -246,6 +256,11 @@ def predecir_late_checkout_xgboost(df):
         
         df_copy = df.copy()
         
+        # Limpiar valores NaN
+        for col in ['noches_estancia', 'num_huespedes', 'planta']:
+            if col in df_copy.columns:
+                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
+        
         # Preparar features para XGBoost
         feature_cols = []
         
@@ -259,14 +274,17 @@ def predecir_late_checkout_xgboost(df):
         categorical_features = ['tipo_habitacion', 'nacionalidad', 'segmento', 'dia_semana']
         for col in categorical_features:
             if col in df_copy.columns:
+                # Rellenar NaN con un valor por defecto
+                df_copy[col] = df_copy[col].fillna('desconocido').astype(str)
+                
                 if col not in st.session_state.label_encoders:
                     st.session_state.label_encoders[col] = LabelEncoder()
-                    valores_unicos = df_copy[col].astype(str).unique()
+                    valores_unicos = df_copy[col].unique()
                     st.session_state.label_encoders[col].fit(valores_unicos)
-                    df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
+                    df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col])
                 else:
                     try:
-                        df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col].astype(str))
+                        df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col])
                     except:
                         df_copy[col + '_xgb'] = 0
                 feature_cols.append(col + '_xgb')
@@ -274,7 +292,7 @@ def predecir_late_checkout_xgboost(df):
         if len(feature_cols) < 2:
             return df
         
-        X = df_copy[feature_cols].values
+        X = df_copy[feature_cols].values.astype(float)
         
         # Predecir probabilidad
         prob_late = xgb_model.predict_proba(X)[:, 1]
@@ -298,6 +316,11 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         return {}
     
     df_asignar = df.copy()
+    
+    # Limpiar valores NaN en columnas importantes
+    for col in ['planta', 'habitacion_id', 'tiempo_estimado']:
+        if col in df_asignar.columns:
+            df_asignar[col] = pd.to_numeric(df_asignar[col], errors='coerce').fillna(0)
     
     # Aplicar XGBoost para mejorar predicción de late checkout
     df_asignar = predecir_late_checkout_xgboost(df_asignar)
@@ -340,7 +363,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
             if ann_model is not None and scaler_ann is not None and feature_cols:
                 cols_disponibles = [c for c in feature_cols if c in df_asignar.columns]
                 if len(cols_disponibles) == len(feature_cols):
-                    X_ann = df_asignar[feature_cols].values
+                    X_ann = df_asignar[feature_cols].values.astype(float)
                     X_ann_scaled = scaler_ann.transform(X_ann)
                     
                     prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
@@ -466,6 +489,11 @@ def procesar_archivo(archivo):
             if col not in df.columns:
                 df[col] = None
         
+        # Limpiar valores NaN en columnas numéricas
+        for col in ['planta', 'habitacion_id', 'noches_estancia', 'num_huespedes']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
         # Aplicar ANN
         if modelos.get('ann') is not None:
             try:
@@ -482,7 +510,7 @@ def procesar_archivo(archivo):
                 if ann_model is not None and scaler_ann is not None and feature_cols:
                     cols_disponibles = [c for c in feature_cols if c in df.columns]
                     if len(cols_disponibles) == len(feature_cols):
-                        X_ann = df[feature_cols].values
+                        X_ann = df[feature_cols].values.astype(float)
                         X_ann_scaled = scaler_ann.transform(X_ann)
                         
                         prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
@@ -1455,7 +1483,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                 
                 # Añadir información de cluster para ordenación
                 if st.session_state.cluster_habitaciones:
-                    df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0)
+                    df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
                 # Ordenar por prioridad (cluster más alto primero = limpieza profunda)
                 if 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
