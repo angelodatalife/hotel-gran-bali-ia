@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión completa con todas las funcionalidades
+# Versión completa con 35 camareras
 # =============================================================================
 
 import streamlit as st
@@ -53,6 +53,13 @@ def cargar_modelos():
     return modelos
 
 modelos = cargar_modelos()
+
+# =============================================================================
+# CONSTANTES
+# =============================================================================
+
+TOTAL_CAMARERAS = 35
+TOTAL_HABITACIONES = 446
 
 # =============================================================================
 # INICIALIZACIÓN DEL ESTADO DE SESIÓN
@@ -115,7 +122,7 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
-def asignar_por_bloques_adyacentes(df, total_camareras=35):
+def asignar_por_bloques_adyacentes(df):
     """Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES"""
     if df is None or len(df) == 0:
         return {}
@@ -134,7 +141,7 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
     
     # 2. Calcular carga total y carga ideal por camarera
     carga_total = sum(carga_por_planta.values())
-    carga_ideal_por_cam = carga_total / total_camareras
+    carga_ideal_por_cam = carga_total / TOTAL_CAMARERAS
     
     # 3. Aplicar ANN para priorizar urgentes
     if modelos.get('ann') is not None:
@@ -198,7 +205,7 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
             resto = len(df_bloque) % num_cam_bloque
             inicio = 0
             for i in range(num_cam_bloque):
-                if cam_idx > total_camareras:
+                if cam_idx > TOTAL_CAMARERAS:
                     break
                 fin = inicio + habs_por_cam + (1 if i < resto else 0)
                 df_cam = df_bloque.iloc[inicio:fin].copy()
@@ -207,9 +214,29 @@ def asignar_por_bloques_adyacentes(df, total_camareras=35):
                 inicio = fin
                 cam_idx += 1
         else:
-            if cam_idx <= total_camareras:
+            if cam_idx <= TOTAL_CAMARERAS:
                 asignacion[f"Camarera {cam_idx:02d}"] = df_bloque
                 cam_idx += 1
+    
+    # Asegurar que tenemos exactamente 35 camareras
+    while cam_idx <= TOTAL_CAMARERAS and len(asignacion) < TOTAL_CAMARERAS:
+        if asignacion:
+            # Tomar la camarera con más habitaciones y dividir
+            cam_max = max(asignacion.items(), key=lambda x: len(x[1]))
+            df_max = cam_max[1]
+            if len(df_max) > 1:
+                mitad = len(df_max) // 2
+                df_cam1 = df_max.iloc[:mitad].copy()
+                df_cam2 = df_max.iloc[mitad:].copy()
+                
+                asignacion[cam_max[0]] = df_cam1
+                if len(df_cam2) > 0:
+                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam2
+                    cam_idx += 1
+            else:
+                break
+        else:
+            break
     
     return asignacion
 
@@ -361,13 +388,12 @@ if selected == "📊 Gerente":
         st.warning("⚠️ Carga un archivo PMS desde el menú lateral")
     else:
         df = st.session_state.df_pms
-        total_habitaciones = 446
         
         # ===== MÉTRICAS PRINCIPALES =====
         col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
         
         with col_metric1:
-            ocupacion = len(df) / total_habitaciones * 100
+            ocupacion = len(df) / TOTAL_HABITACIONES * 100
             st.markdown(
                 f"""
                 <div style="
@@ -393,7 +419,7 @@ if selected == "📊 Gerente":
         with col_metric2:
             st.metric("Habitaciones", len(df))
         with col_metric3:
-            st.metric("Camareras", "35")
+            st.metric("Camareras", str(TOTAL_CAMARERAS))
         with col_metric4:
             st.metric("Stand By", len(st.session_state.habitaciones_standby))
         
@@ -424,7 +450,14 @@ if selected == "📊 Gerente":
                         return "#808080"  # Gris
                 return "#4CAF50"  # Verde (completada sin problemas)
             elif hab_id in st.session_state.habitaciones_standby:
-                return "#FFA500"  # Naranja para standby también
+                # Buscar el tipo de problema para el color correcto
+                for inc in st.session_state.incidencias:
+                    if inc['habitacion'] == hab_id:
+                        if inc['tipo'] == "Falta suministros":
+                            return "#FFA500"  # Naranja
+                        elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
+                            return "#FF4444"  # Rojo
+                return "#FFA500"  # Naranja por defecto para standby
             return "#FFFFFF"  # Blanco (pendiente)
         
         # Crear pestañas por sector
@@ -551,8 +584,12 @@ if selected == "📊 Gerente":
         if st.session_state.asignacion_por_camarera:
             # Preparar datos para el gráfico
             datos_carga = []
-            for cam, df_cam in st.session_state.asignacion_por_camarera.items():
-                num_hab = len(df_cam)
+            for i in range(1, TOTAL_CAMARERAS + 1):
+                cam = f"Camarera {i:02d}"
+                if cam in st.session_state.asignacion_por_camarera:
+                    num_hab = len(st.session_state.asignacion_por_camarera[cam])
+                else:
+                    num_hab = 0
                 datos_carga.append({
                     'Camarera': cam,
                     'Habitaciones': num_hab
@@ -589,7 +626,8 @@ if selected == "📊 Gerente":
                 title='Habitaciones asignadas por camarera',
                 xaxis_tickangle=-45,
                 yaxis_title="Número de habitaciones",
-                height=500
+                height=500,
+                xaxis={'categoryorder':'array', 'categoryarray': [f"Camarera {i:02d}" for i in range(1, TOTAL_CAMARERAS + 1)]}
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -662,7 +700,7 @@ elif selected == "🧹 Camarera":
             st.subheader("👤 Selecciona tu perfil")
             
             # Selector con dirección hacia abajo
-            camareras = list(st.session_state.asignacion_por_camarera.keys())
+            camareras = [f"Camarera {i:02d}" for i in range(1, TOTAL_CAMARERAS + 1)]
             st.session_state.camarera_actual = st.selectbox(
                 "Nombre:",
                 camareras,
