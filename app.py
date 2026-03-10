@@ -355,7 +355,7 @@ with st.sidebar:
 # VISTA GERENTE - CON HEATMAP, OCUPACIÓN Y CARGA DE TRABAJO
 # =============================================================================
 
-elif selected == "📊 Gerente":
+if selected == "📊 Gerente":
     st.title("📊 Dashboard Gerente - Hotel Gran Bali")
     
     if st.session_state.df_pms is None:
@@ -552,7 +552,6 @@ elif selected == "📊 Gerente":
             datos_carga = []
             for cam, df_cam in st.session_state.asignacion_por_camarera.items():
                 num_hab = len(df_cam)
-                # Calcular media de habitaciones por camarera
                 datos_carga.append({
                     'Camarera': cam,
                     'Habitaciones': num_hab
