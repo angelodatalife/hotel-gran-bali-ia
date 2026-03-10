@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con pantalla de inicio centralizada
+# Versión con pantalla de inicio centralizada mejorada
 # =============================================================================
 
 import streamlit as st
@@ -294,46 +294,44 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# PANTALLA DE INICIO (antes de cargar archivo)
+# PANTALLA DE INICIO (antes de cargar archivo) - MEJORADA
 # =============================================================================
 
 def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio centralizada"""
+    """Muestra la pantalla de inicio centralizada con diseño mejorado"""
     
     # Título principal
     st.markdown(
         """
-        <h1 style='text-align: center; color: #1E88E5;'>🏨 Hotel Gran Bali</h1>
-        <h3 style='text-align: center; color: #666;'>Sistema de Gestión IA de Limpieza</h3>
-        <br><br>
+        <h1 style='text-align: center; color: #1E88E5; font-size: 48px; margin-bottom: 10px;'>🏨 Hotel Gran Bali</h1>
+        <h3 style='text-align: center; color: #666; font-weight: 300; margin-top: 0; margin-bottom: 40px;'>Sistema de Gestión IA de Limpieza</h3>
         """,
         unsafe_allow_html=True
     )
     
-    # Contenedor central para la carga de archivos
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Contenedor central para la carga de archivos (más compacto)
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     
     with col2:
-        # Caja de carga de archivos (estilo drag and drop)
+        # Caja de carga de archivos con estilo drag and drop mejorado
         st.markdown(
             """
             <div style="
                 border: 3px dashed #1E88E5;
                 border-radius: 20px;
-                padding: 40px;
+                padding: 25px 20px;
                 text-align: center;
                 background-color: #f8f9fa;
-                margin-bottom: 30px;
+                margin-bottom: 15px;
             ">
-                <h2 style="color: #1E88E5;">📂 Cargar PMS</h2>
-                <p style="font-size: 18px; color: #666;">Arrastra tu archivo CSV aquí</p>
-                <p style="color: #999;">o</p>
+                <h2 style="color: #1E88E5; margin-top: 0; margin-bottom: 15px; font-size: 28px;">📂 Cargar PMS</h2>
+                <p style="font-size: 18px; color: #666; margin-bottom: 10px;">Arrastra tu archivo CSV aquí</p>
             </div>
             """,
             unsafe_allow_html=True
         )
         
-        # File uploader de Streamlit (estilizado)
+        # File uploader de Streamlit (estilizado y compacto)
         archivo = st.file_uploader(
             "Selecciona archivo CSV",
             type=['csv'],
@@ -344,18 +342,18 @@ def mostrar_pantalla_inicio():
         if archivo is not None:
             procesar_archivo(archivo)
         
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        # Separador visual pequeño
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        # Sección de modelos cargados
+        # Sección de modelos cargados (más pequeña y compacta)
         st.markdown(
             """
-            <h3 style='text-align: center; color: #666;'>🤖 Modelos cargados</h3>
-            <br>
+            <h4 style='text-align: center; color: #666; margin-bottom: 15px;'>🤖 Modelos cargados</h4>
             """,
             unsafe_allow_html=True
         )
         
-        # Mostrar modelos en filas
+        # Mostrar modelos en una fila compacta
         col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
         
         with col_mod1:
@@ -364,13 +362,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #e8f5e8;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #4CAF50;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">✅</span><br>
-                        <strong>ANN</strong>
+                        ✅ ANN
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -380,13 +378,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #ffebee;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #f44336;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">❌</span><br>
-                        <strong>ANN</strong>
+                        ❌ ANN
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -398,13 +396,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #e8f5e8;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #4CAF50;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">✅</span><br>
-                        <strong>XGBoost</strong>
+                        ✅ XGBoost
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -414,13 +412,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #ffebee;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #f44336;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">❌</span><br>
-                        <strong>XGBoost</strong>
+                        ❌ XGBoost
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -432,13 +430,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #e8f5e8;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #4CAF50;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">✅</span><br>
-                        <strong>K-Means</strong>
+                        ✅ K-Means
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -448,13 +446,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #ffebee;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #f44336;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">❌</span><br>
-                        <strong>K-Means</strong>
+                        ❌ K-Means
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -466,13 +464,13 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #e8f5e8;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #4CAF50;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">✅</span><br>
-                        <strong>NLP</strong>
+                        ✅ NLP
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -482,33 +480,31 @@ def mostrar_pantalla_inicio():
                     """
                     <div style="
                         background-color: #ffebee;
-                        border-radius: 10px;
-                        padding: 15px;
+                        border-radius: 8px;
+                        padding: 8px 5px;
                         text-align: center;
                         border: 1px solid #f44336;
+                        font-size: 14px;
                     ">
-                        <span style="font-size: 24px;">❌</span><br>
-                        <strong>NLP</strong>
+                        ❌ NLP
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
         
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        # Información adicional
+        # Información adicional pequeña al pie
         st.markdown(
             """
             <div style="
                 background-color: #e3f2fd;
-                border-radius: 10px;
-                padding: 20px;
+                border-radius: 8px;
+                padding: 12px;
                 text-align: center;
                 border: 1px solid #1E88E5;
+                margin-top: 25px;
+                font-size: 13px;
             ">
-                <p style="color: #0d47a1; margin: 0;">
-                    <strong>📊 Formato esperado:</strong> CSV con columnas: habitacion_id, planta, tiempo_estimado, etc.
-                </p>
+                <span style="color: #0d47a1;">📊 Formato esperado: CSV con columnas: habitacion_id, planta, tiempo_estimado, etc.</span>
             </div>
             """,
             unsafe_allow_html=True
