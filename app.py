@@ -1003,7 +1003,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                         elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
                             return "#FF4444"  # Rojo
                 return "#FFA500"  # Naranja por defecto para standby
-            return "#FFFFFF"  # Blanco (pendiente)
+            return "transparent"  # Sin color (pendiente)
         
         # Crear pestañas por sector
         subtab1, subtab2, subtab3 = st.tabs(["🔵 Sector Bajo", "🟡 Sector Medio", "🔴 Sector Alto"])
@@ -1073,7 +1073,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
             st.markdown(
                 """
                 <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #FFFFFF; border: 2px solid #ddd; border-radius: 4px; margin-right: 8px;"></div>
+                    <div style="width: 20px; height: 20px; background-color: transparent; border: 2px solid #ddd; border-radius: 4px; margin-right: 8px;"></div>
                     <span>Pendiente</span>
                 </div>
                 """,
