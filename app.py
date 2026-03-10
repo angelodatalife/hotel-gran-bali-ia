@@ -46,10 +46,13 @@ def cargar_modelos():
             try:
                 with open(archivo, 'rb') as f:
                     modelos[nombre] = pickle.load(f)
+                st.sidebar.success(f"✅ {nombre} cargado")
             except Exception as e:
                 modelos[nombre] = None
+                st.sidebar.error(f"❌ Error cargando {nombre}: {str(e)}")
         else:
             modelos[nombre] = None
+            st.sidebar.warning(f"⚠️ Archivo {archivo} no encontrado")
     
     return modelos
 
@@ -133,98 +136,131 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 def aplicar_kmeans(df):
-    """Aplica K-Means para segmentar habitaciones por perfil de limpieza"""
+    """Aplica K-Means para segmentar habitaciones por perfil de limpieza
+    Utiliza el modelo entrenado en Modelos.ipynb que agrupa por plantas"""
+    
     # Verificar si el modelo K-Means existe y es accesible
     if modelos.get('kmeans') is None or df is None or len(df) == 0:
         return {}
     
     try:
-        # Extraer el modelo K-Means (puede ser un dict o el modelo directamente)
-        kmeans_model = modelos['kmeans']
+        # Extraer el modelo K-Means del diccionario guardado
+        kmeans_data = modelos['kmeans']
         
-        # Si es un diccionario, intentar extraer el modelo
-        if isinstance(kmeans_model, dict):
-            if 'modelo' in kmeans_model:
-                kmeans_model = kmeans_model['modelo']
-            else:
-                # Buscar cualquier clave que pueda contener el modelo
-                for key in ['kmeans', 'model', 'clusterer']:
-                    if key in kmeans_model:
-                        kmeans_model = kmeans_model[key]
-                        break
-                else:
-                    # Si no encontramos nada, no podemos usar K-Means
-                    return {}
+        # El modelo está guardado como un diccionario con varias claves
+        if isinstance(kmeans_data, dict):
+            # Extraer el modelo y el scaler
+            kmeans_model = kmeans_data.get('modelo')
+            scaler = kmeans_data.get('scaler')
+            features = kmeans_data.get('features', [])
+            
+            # Verificar que tenemos lo necesario
+            if kmeans_model is None or scaler is None:
+                st.warning("⚠️ Modelo K-Means incompleto")
+                return {}
+        else:
+            # Si no es diccionario, asumimos que es el modelo directamente
+            kmeans_model = kmeans_data
+            scaler = None
         
         # Verificar que el modelo tiene método predict
         if not hasattr(kmeans_model, 'predict'):
+            st.warning("⚠️ El modelo K-Means no tiene método predict")
             return {}
         
-        df_copy = df.copy()
+        # Preparar datos para predicción a nivel de planta
+        # El modelo K-Means fue entrenado con estadísticas por planta
+        df_planta_stats = df.groupby('planta').agg({
+            'tiempo_estimado': 'mean',
+            'habitacion_id': 'count',  # Número de habitaciones en la planta
+        }).reset_index()
         
-        # Limpiar valores NaN
-        for col in ['planta', 'noches_estancia', 'num_huespedes', 'tiene_ninos']:
-            if col in df_copy.columns:
-                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
+        df_planta_stats.columns = ['planta', 'tiempo_promedio', 'num_habitaciones']
         
-        # Convertir tiene_ninos a int si existe
-        if 'tiene_ninos' in df_copy.columns:
-            df_copy['tiene_ninos'] = df_copy['tiene_ninos'].astype(int)
+        # Añadir más features que el modelo espera
+        # Calcular estadísticas adicionales por planta
+        if 'late_checkout_pred' in df.columns:
+            late_by_planta = df.groupby('planta')['late_checkout_pred'].mean().reset_index()
+            df_planta_stats = df_planta_stats.merge(late_by_planta, on='planta', how='left')
+            df_planta_stats['late_checkout_pred'] = df_planta_stats['late_checkout_pred'].fillna(0)
+        else:
+            df_planta_stats['late_checkout_pred'] = 0
+            
+        if 'noches_estancia' in df.columns:
+            noches_by_planta = df.groupby('planta')['noches_estancia'].mean().reset_index()
+            df_planta_stats = df_planta_stats.merge(noches_by_planta, on='planta', how='left')
+            df_planta_stats['noches_estancia'] = df_planta_stats['noches_estancia'].fillna(df['noches_estancia'].mean())
+        else:
+            df_planta_stats['noches_estancia'] = 3  # valor por defecto
+            
+        if 'num_huespedes' in df.columns:
+            huespedes_by_planta = df.groupby('planta')['num_huespedes'].mean().reset_index()
+            df_planta_stats = df_planta_stats.merge(huespedes_by_planta, on='planta', how='left')
+            df_planta_stats['num_huespedes'] = df_planta_stats['num_huespedes'].fillna(df['num_huespedes'].mean())
+        else:
+            df_planta_stats['num_huespedes'] = 2  # valor por defecto
+            
+        if 'tiene_ninos' in df.columns:
+            ninos_by_planta = df.groupby('planta')['tiene_ninos'].mean().reset_index()
+            df_planta_stats = df_planta_stats.merge(ninos_by_planta, on='planta', how='left')
+            df_planta_stats['tiene_ninos'] = df_planta_stats['tiene_ninos'].fillna(0)
+        else:
+            df_planta_stats['tiene_ninos'] = 0
+            
+        # Añadir sector basado en planta
+        df_planta_stats['sector_num'] = df_planta_stats['planta'].apply(
+            lambda x: 0 if x <= 15 else (1 if x <= 30 else 2)
+        )
         
-        # Codificar variables categóricas para K-Means
-        categorical_cols = ['tipo_habitacion', 'sector', 'segmento']
-        for col in categorical_cols:
-            if col in df_copy.columns:
-                # Rellenar NaN con un valor por defecto
-                df_copy[col] = df_copy[col].fillna('desconocido').astype(str)
-                
-                if col not in st.session_state.label_encoders:
-                    st.session_state.label_encoders[col] = LabelEncoder()
-                    # Fit con valores únicos de esta columna
-                    valores_unicos = df_copy[col].unique()
-                    st.session_state.label_encoders[col].fit(valores_unicos)
-                    df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col])
-                else:
-                    # Manejar valores nuevos no vistos durante el entrenamiento
-                    try:
-                        df_copy[col + '_encoded'] = st.session_state.label_encoders[col].transform(df_copy[col])
-                    except:
-                        # Si hay valores nuevos, asignar el valor más frecuente (0)
-                        df_copy[col + '_encoded'] = 0
+        # Seleccionar las features en el orden que espera el modelo
+        # Según el entrenamiento, las features usadas son:
+        # ['planta', 'tiempo_promedio', 'tasa_late_checkout',
+        #  'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
+        #  'sector_num', 'num_habitaciones']
         
-        # Seleccionar features para clustering
-        feature_cols = []
-        if 'planta' in df_copy.columns:
-            feature_cols.append('planta')
-        if 'noches_estancia' in df_copy.columns:
-            feature_cols.append('noches_estancia')
-        if 'num_huespedes' in df_copy.columns:
-            feature_cols.append('num_huespedes')
-        if 'tiene_ninos' in df_copy.columns:
-            feature_cols.append('tiene_ninos')
-        if 'tipo_habitacion_encoded' in df_copy.columns:
-            feature_cols.append('tipo_habitacion_encoded')
-        if 'sector_encoded' in df_copy.columns:
-            feature_cols.append('sector_encoded')
-        if 'segmento_encoded' in df_copy.columns:
-            feature_cols.append('segmento_encoded')
+        feature_cols = ['planta', 'tiempo_promedio', 'late_checkout_pred',
+                       'noches_estancia', 'num_huespedes', 'tiene_ninos',
+                       'sector_num', 'num_habitaciones']
         
-        if len(feature_cols) < 2:
-            return {}
+        # Asegurar que todas las columnas existen
+        for col in feature_cols:
+            if col not in df_planta_stats.columns:
+                df_planta_stats[col] = 0
         
-        X = df_copy[feature_cols].values.astype(float)
+        X = df_planta_stats[feature_cols].values
         
-        # Predecir clusters
-        clusters = kmeans_model.predict(X)
+        # Escalar si tenemos scaler
+        if scaler is not None:
+            try:
+                X_scaled = scaler.transform(X)
+            except:
+                # Si hay error con el scaler, usar sin escalar
+                X_scaled = X
+        else:
+            X_scaled = X
         
-        # Mapear habitación a cluster
+        # Predecir clusters para cada planta
+        clusters_planta = kmeans_model.predict(X_scaled)
+        
+        # Crear un diccionario que mapee planta a cluster
+        planta_a_cluster = {}
+        for i, row in df_planta_stats.iterrows():
+            planta_a_cluster[int(row['planta'])] = int(clusters_planta[i])
+        
+        # Asignar cluster a cada habitación basado en su planta
         cluster_dict = {}
-        for i, hab_id in enumerate(df_copy['habitacion_id'].values):
-            cluster_dict[hab_id] = int(clusters[i])
+        for _, row in df.iterrows():
+            planta = int(row['planta'])
+            hab_id = row['habitacion_id']
+            if planta in planta_a_cluster:
+                cluster_dict[hab_id] = planta_a_cluster[planta]
+            else:
+                cluster_dict[hab_id] = 0  # cluster por defecto
         
         return cluster_dict
+        
     except Exception as e:
-        # Silenciosamente fallar sin mostrar warning
+        st.warning(f"⚠️ Error al aplicar K-Means: {str(e)}")
         return {}
 
 def predecir_late_checkout_xgboost(df):
@@ -234,21 +270,17 @@ def predecir_late_checkout_xgboost(df):
         return df
     
     try:
-        # Extraer el modelo XGBoost
-        xgb_model = modelos['xgboost']
+        # Extraer el modelo XGBoost del diccionario guardado
+        xgb_data = modelos['xgboost']
         
-        # Si es un diccionario, intentar extraer el modelo
-        if isinstance(xgb_model, dict):
-            if 'modelo' in xgb_model:
-                xgb_model = xgb_model['modelo']
-            else:
-                # Buscar cualquier clave que pueda contener el modelo
-                for key in ['xgb', 'model', 'classifier']:
-                    if key in xgb_model:
-                        xgb_model = xgb_model[key]
-                        break
-                else:
-                    return df
+        if isinstance(xgb_data, dict):
+            xgb_model = xgb_data.get('modelo')
+            encoders = xgb_data.get('encoders', {})
+            feature_cols = xgb_data.get('feature_cols', [])
+        else:
+            xgb_model = xgb_data
+            encoders = {}
+            feature_cols = []
         
         # Verificar que el modelo tiene método predict_proba
         if not hasattr(xgb_model, 'predict_proba'):
@@ -262,37 +294,25 @@ def predecir_late_checkout_xgboost(df):
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         
         # Preparar features para XGBoost
-        feature_cols = []
-        
         # Features numéricas
         numeric_features = ['noches_estancia', 'num_huespedes', 'planta']
-        for col in numeric_features:
-            if col in df_copy.columns:
-                feature_cols.append(col)
         
-        # Codificar variables categóricas
-        categorical_features = ['tipo_habitacion', 'nacionalidad', 'segmento', 'dia_semana']
-        for col in categorical_features:
-            if col in df_copy.columns:
-                # Rellenar NaN con un valor por defecto
-                df_copy[col] = df_copy[col].fillna('desconocido').astype(str)
-                
-                if col not in st.session_state.label_encoders:
-                    st.session_state.label_encoders[col] = LabelEncoder()
-                    valores_unicos = df_copy[col].unique()
-                    st.session_state.label_encoders[col].fit(valores_unicos)
-                    df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col])
+        # Si tenemos feature_cols del modelo, usarlas
+        if feature_cols:
+            # Intentar crear las features que espera el modelo
+            X = []
+            for col in feature_cols:
+                if col in df_copy.columns:
+                    X.append(df_copy[col].values)
                 else:
-                    try:
-                        df_copy[col + '_xgb'] = st.session_state.label_encoders[col].transform(df_copy[col])
-                    except:
-                        df_copy[col + '_xgb'] = 0
-                feature_cols.append(col + '_xgb')
+                    # Si falta alguna columna, añadir ceros
+                    X.append(np.zeros(len(df_copy)))
+            X = np.array(X).T
+        else:
+            # Usar features por defecto
+            X = df_copy[numeric_features].values
         
-        if len(feature_cols) < 2:
-            return df
-        
-        X = df_copy[feature_cols].values.astype(float)
+        X = X.astype(float)
         
         # Predecir probabilidad
         prob_late = xgb_model.predict_proba(X)[:, 1]
@@ -307,7 +327,7 @@ def predecir_late_checkout_xgboost(df):
         
         return df
     except Exception as e:
-        # Silenciosamente fallar sin mostrar warning
+        st.warning(f"⚠️ Error en XGBoost: {str(e)}")
         return df
 
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
@@ -373,7 +393,8 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
                     df_asignar['late_checkout_pred'] = 0
             else:
                 df_asignar['late_checkout_pred'] = 0
-        except:
+        except Exception as e:
+            st.warning(f"⚠️ Error en ANN: {str(e)}")
             df_asignar['late_checkout_pred'] = 0
     else:
         df_asignar['late_checkout_pred'] = 0
@@ -517,7 +538,7 @@ def procesar_archivo(archivo):
                         df['prob_late'] = prob_late
                         df['late_checkout_pred'] = (prob_late > 0.5).astype(int)
             except Exception as e:
-                pass  # Silenciosamente ignorar errores de ANN
+                st.warning(f"⚠️ Error en ANN durante carga: {str(e)}")
         
         st.session_state.df_pms = df
         
@@ -1248,12 +1269,15 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                         )
                         st.plotly_chart(fig, use_container_width=True)
                         
-                        # Explicación de perfiles
+                        # Explicación de perfiles según el entrenamiento
                         st.caption("""
-                        **Perfiles de limpieza:**
-                        - **Perfil 0**: Limpieza rápida (habitaciones estándar, pocas noches)
-                        - **Perfil 1**: Limpieza media (familias, estancias medias)
-                        - **Perfil 2**: Limpieza profunda (suites, VIP, muchas noches)
+                        **Perfiles de limpieza (según K-Means):**
+                        - **Perfil 0**: Plantas 16-30 (medio, ~29 min promedio)
+                        - **Perfil 1**: Plantas 37-52 (alto, ~40 min promedio)
+                        - **Perfil 2**: Plantas 2-15 (bajo, ~28 min promedio)
+                        - **Perfil 3**: Plantas 17-29 (medio, ~29 min promedio)
+                        - **Perfil 4**: Plantas 31-48 (alto, ~40 min promedio)
+                        - **Perfil 5**: Plantas 32-49 (alto, ~40 min promedio)
                         """)
         else:
             st.info("No hay datos de asignación disponibles")
@@ -1343,11 +1367,9 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         # Mostrar perfil si está disponible
                         if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
                             cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
-                            if cluster == 0:
-                                st.markdown("**Perfil:** ⚡ Rápido")
-                            elif cluster == 1:
+                            if cluster == 2 or cluster == 0 or cluster == 3:
                                 st.markdown("**Perfil:** 📊 Estándar")
-                            elif cluster == 2:
+                            elif cluster == 1 or cluster == 4 or cluster == 5:
                                 st.markdown("**Perfil:** 🔬 Profundo")
                     
                     with col_crono2:
@@ -1523,12 +1545,10 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                 # Mostrar perfil si está disponible
                                 if st.session_state.cluster_habitaciones and row['habitacion_id'] in st.session_state.cluster_habitaciones:
                                     cluster = st.session_state.cluster_habitaciones[row['habitacion_id']]
-                                    if cluster == 2:
+                                    if cluster == 1 or cluster == 4 or cluster == 5:
                                         st.caption("🔬 Limpieza profunda")
-                                    elif cluster == 1:
-                                        st.caption("📊 Limpieza media")
                                     else:
-                                        st.caption("⚡ Limpieza rápida")
+                                        st.caption("📊 Limpieza estándar")
                             
                             with cols[1]:
                                 if 'late_checkout_pred' in row and row['late_checkout_pred'] == 1:
