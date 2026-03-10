@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con pantalla de inicio centralizada y mejoras visuales
+# Versión con asignación equitativa garantizada para 35 camareras
 # =============================================================================
 
 import streamlit as st
@@ -128,7 +128,10 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
-    """Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES y mantiene orden 1-35"""
+    """
+    Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES
+    Garantiza que TODAS las camareras 1-35 tengan habitaciones
+    """
     if df is None or len(df) == 0:
         return {}
     
@@ -193,47 +196,37 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
             'carga': carga_acumulada
         })
     
-    # 5. Asignar camareras a bloques (manteniendo orden 1-35)
-    asignacion = {}
-    cam_idx = 1
-    
+    # 5. Recolectar todas las habitaciones para distribución equitativa
+    todas_habitaciones = []
     for bloque in bloques:
         plantas_bloque = bloque['plantas']
-        carga_bloque = bloque['carga']
-        
-        num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
+        # Ordenar por prioridad
         df_bloque = df_bloque.sort_values(by=['late_checkout_pred', 'habitacion_id'], ascending=[False, True])
-        
-        if num_cam_bloque > 1:
-            habs_por_cam = len(df_bloque) // num_cam_bloque
-            resto = len(df_bloque) % num_cam_bloque
-            inicio = 0
-            for i in range(num_cam_bloque):
-                if cam_idx > num_camareras:
-                    break
-                fin = inicio + habs_por_cam + (1 if i < resto else 0)
-                df_cam = df_bloque.iloc[inicio:fin].copy()
-                if len(df_cam) > 0:
-                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam
-                inicio = fin
-                cam_idx += 1
-        else:
-            if cam_idx <= num_camareras:
-                asignacion[f"Camarera {cam_idx:02d}"] = df_bloque
-                cam_idx += 1
+        todas_habitaciones.extend(df_bloque.to_dict('records'))
     
-    # 6. Asegurar que tenemos exactamente 35 camareras y mantener orden
-    asignacion_final = {}
+    # 6. Distribuir equitativamente entre TODAS las camareras
+    num_hab = len(todas_habitaciones)
+    habs_por_cam = num_hab // num_camareras
+    resto = num_hab % num_camareras
+    
+    asignacion = {}
+    inicio = 0
+    
     for i in range(1, num_camareras + 1):
-        cam_name = f"Camarera {i:02d}"
-        if cam_name in asignacion:
-            asignacion_final[cam_name] = asignacion[cam_name]
+        fin = inicio + habs_por_cam + (1 if i <= resto else 0)
+        cam_hab = todas_habitaciones[inicio:fin]
+        
+        if cam_hab:
+            df_cam = pd.DataFrame(cam_hab)
+            asignacion[f"Camarera {i:02d}"] = df_cam
         else:
-            # Asignar DataFrame vacío para camareras sin habitaciones
-            asignacion_final[cam_name] = pd.DataFrame()
+            # Esto no debería ocurrir, pero por seguridad
+            asignacion[f"Camarera {i:02d}"] = pd.DataFrame()
+        
+        inicio = fin
     
-    return asignacion_final
+    return asignacion
 
 def actualizar_dataset(hab_id, campo, valor):
     """Actualiza una columna específica en el dataset para una habitación"""
@@ -866,80 +859,70 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         st.title("📊 Carga de trabajo por camarera")
         
         if st.session_state.asignacion_por_camarera:
-            # Definir sectores
-            sectores_carga = {
-                'Sector Bajo': list(range(2, 16)),
-                'Sector Medio': list(range(16, 31)),
-                'Sector Alto': list(range(31, 53))
-            }
+            # Crear lista de todas las camareras con sus habitaciones
+            datos_carga = []
+            for i in range(1, st.session_state.num_camareras + 1):
+                cam = f"Camarera {i:02d}"
+                if cam in st.session_state.asignacion_por_camarera:
+                    df_cam = st.session_state.asignacion_por_camarera[cam]
+                    num_hab = len(df_cam) if df_cam is not None and len(df_cam) > 0 else 0
+                    datos_carga.append({
+                        'Camarera': cam,
+                        'Habitaciones': num_hab
+                    })
             
-            # Crear gráficos por sector
-            for sector_nombre, plantas in sectores_carga.items():
-                st.markdown(f"### {sector_nombre}")
+            if datos_carga:
+                df_carga = pd.DataFrame(datos_carga)
+                media_hab = df_carga['Habitaciones'].mean()
+                umbral_alto = media_hab * 1.2
                 
-                # Filtrar camareras que trabajan en este sector
-                datos_sector = []
-                for i in range(1, st.session_state.num_camareras + 1):
-                    cam = f"Camarera {i:02d}"
-                    if cam in st.session_state.asignacion_por_camarera:
-                        df_cam = st.session_state.asignacion_por_camarera[cam]
-                        # Verificar si la camarera tiene habitaciones en este sector
-                        if len(df_cam) > 0 and any(p in plantas for p in df_cam['planta'].unique()):
-                            num_hab = len(df_cam)
-                            datos_sector.append({
-                                'Camarera': cam,
-                                'Habitaciones': num_hab
-                            })
+                # Crear gráfico de barras
+                fig = go.Figure()
                 
-                if datos_sector:
-                    # Ordenar por número de camarera para mantener orden 1-35
-                    datos_sector.sort(key=lambda x: int(x['Camarera'].split()[1]))
-                    df_carga_sector = pd.DataFrame(datos_sector)
-                    
-                    if len(df_carga_sector) > 0:
-                        media_hab = df_carga_sector['Habitaciones'].mean()
-                        umbral_alto = media_hab * 1.2
-                        
-                        # Crear gráfico de barras para el sector
-                        fig = go.Figure()
-                        
-                        for _, row in df_carga_sector.iterrows():
-                            color = '#FF4444' if row['Habitaciones'] > umbral_alto else '#1E88E5'
-                            fig.add_trace(go.Bar(
-                                x=[row['Camarera']],
-                                y=[row['Habitaciones']],
-                                name=row['Camarera'],
-                                marker_color=color,
-                                showlegend=False
-                            ))
-                        
-                        fig.add_hline(
-                            y=media_hab,
-                            line_dash="dash",
-                            line_color="blue",
-                            annotation_text=f"Media: {media_hab:.1f}",
-                            annotation_position="top right"
-                        )
-                        
-                        fig.update_layout(
-                            title=f'Carga de trabajo - {sector_nombre}',
-                            xaxis_tickangle=-45,
-                            yaxis_title="Número de habitaciones",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Mostrar camareras con sobrecarga en este sector
-                        sobrecargadas = df_carga_sector[df_carga_sector['Habitaciones'] > umbral_alto]
-                        if len(sobrecargadas) > 0:
-                            st.warning(f"⚠️ Camareras con sobrecarga en {sector_nombre}:")
-                            for _, row in sobrecargadas.iterrows():
-                                st.markdown(f"- {row['Camarera']}: {row['Habitaciones']} habitaciones")
-                else:
-                    st.info(f"No hay camareras asignadas al sector {sector_nombre}")
+                for _, row in df_carga.iterrows():
+                    color = '#FF4444' if row['Habitaciones'] > umbral_alto else '#1E88E5'
+                    fig.add_trace(go.Bar(
+                        x=[row['Camarera']],
+                        y=[row['Habitaciones']],
+                        name=row['Camarera'],
+                        marker_color=color,
+                        showlegend=False
+                    ))
                 
-                st.markdown("---")
+                fig.add_hline(
+                    y=media_hab,
+                    line_dash="dash",
+                    line_color="blue",
+                    annotation_text=f"Media: {media_hab:.1f}",
+                    annotation_position="top right"
+                )
+                
+                fig.update_layout(
+                    title='Carga de trabajo por camarera',
+                    xaxis_tickangle=-45,
+                    yaxis_title="Número de habitaciones",
+                    height=500
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Mostrar estadísticas
+                col_est1, col_est2, col_est3 = st.columns(3)
+                with col_est1:
+                    st.metric("Total habitaciones", int(df_carga['Habitaciones'].sum()))
+                with col_est2:
+                    st.metric("Media por camarera", f"{media_hab:.1f}")
+                with col_est3:
+                    st.metric("Camareras con carga", len([x for x in datos_carga if x['Habitaciones'] > 0]))
+                
+                # Mostrar camareras con sobrecarga
+                sobrecargadas = df_carga[df_carga['Habitaciones'] > umbral_alto]
+                if len(sobrecargadas) > 0:
+                    st.warning("⚠️ Camareras con sobrecarga:")
+                    for _, row in sobrecargadas.iterrows():
+                        st.markdown(f"- {row['Camarera']}: {row['Habitaciones']} habitaciones")
+            else:
+                st.info("No hay datos de asignación disponibles")
         else:
             st.info("No hay datos de asignación disponibles")
 
@@ -956,18 +939,12 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
         if st.session_state.camarera_actual is None:
             st.subheader("👤 Selecciona tu perfil")
             
-            # Obtener lista de camareras con habitaciones asignadas
-            camareras_con_hab = []
-            for i in range(1, st.session_state.num_camareras + 1):
-                cam = f"Camarera {i:02d}"
-                if cam in st.session_state.asignacion_por_camarera:
-                    df_cam = st.session_state.asignacion_por_camarera[cam]
-                    if len(df_cam) > 0:  # Solo mostrar camareras con habitaciones
-                        camareras_con_hab.append(cam)
+            # Lista de todas las camareras 1-35
+            camareras = [f"Camarera {i:02d}" for i in range(1, st.session_state.num_camareras + 1)]
             
             st.session_state.camarera_actual = st.selectbox(
                 "Nombre:",
-                camareras_con_hab,
+                camareras,
                 index=None,
                 placeholder="Elige tu nombre...",
                 key="select_camarera_principal",
@@ -1000,6 +977,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                 if len(df_asignadas) > 0:
                     plantas_unicas = sorted(df_asignadas['planta'].unique())
                     st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)}")
+                else:
+                    st.info("📌 Sin habitaciones asignadas")
             with col_info3:
                 # Botón sin parámetro disabled para evitar errores
                 if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal"):
