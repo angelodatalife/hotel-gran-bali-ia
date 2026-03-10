@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con pantalla de inicio centralizada y diseño mejorado
+# Versión con pantalla de inicio centralizada y modelos centrados
 # =============================================================================
 
 import streamlit as st
@@ -298,7 +298,7 @@ def procesar_archivo(archivo):
 # =============================================================================
 
 def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio centralizada con diseño limpio"""
+    """Muestra la pantalla de inicio centralizada con modelos centrados"""
     
     # Espaciado superior para centrar verticalmente
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -346,16 +346,16 @@ def mostrar_pantalla_inicio():
             unsafe_allow_html=True
         )
         
-        # Mostrar modelos en una sola línea con íconos pequeños
+        # Mostrar modelos en línea perfectamente centrados
         col_mod1, col_mod2, col_mod3, col_mod4, col_mod5 = st.columns([1, 1, 1, 1, 1])
         
         with col_mod1:
             if modelos.get('ann') is not None:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">✅</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">ANN</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">ANN</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -363,9 +363,9 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">❌</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">ANN</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">ANN</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -375,9 +375,9 @@ def mostrar_pantalla_inicio():
             if modelos.get('xgboost') is not None:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">✅</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">XGBoost</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">XGBoost</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -385,9 +385,9 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">❌</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">XGBoost</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">XGBoost</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -397,9 +397,9 @@ def mostrar_pantalla_inicio():
             if modelos.get('kmeans') is not None:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">✅</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">K-Means</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">K-Means</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -407,9 +407,9 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">❌</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">K-Means</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">K-Means</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -419,9 +419,9 @@ def mostrar_pantalla_inicio():
             if modelos.get('nlp') is not None:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">✅</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">NLP</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">NLP</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -429,16 +429,16 @@ def mostrar_pantalla_inicio():
             else:
                 st.markdown(
                     """
-                    <div style="text-align: center;">
+                    <div style="text-align: center; background-color: #f0f0f0; border-radius: 10px; padding: 8px 0; margin: 0 5px;">
                         <span style="font-size: 1.2rem;">❌</span><br>
-                        <span style="font-size: 0.9rem; color: #333;">NLP</span>
+                        <span style="font-size: 0.9rem; font-weight: 500; color: #333;">NLP</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
         
         with col_mod5:
-            # Columna vacía para equilibrar
+            # Columna vacía para mantener el centrado perfecto
             st.markdown("")
         
         st.markdown("<br><br>", unsafe_allow_html=True)
