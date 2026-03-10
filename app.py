@@ -826,6 +826,16 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     with tab_dashboard:
         st.title("📊 Dashboard Gerente - Hotel Gran Bali")
         
+        # Calcular checkouts
+        if 'late_checkout_pred_combinado' in df.columns:
+            checkouts = int(df['late_checkout_pred_combinado'].sum())
+        elif 'late_checkout_pred' in df.columns:
+            checkouts = int(df['late_checkout_pred'].sum())
+        elif 'late_checkout_pred_xgb' in df.columns:
+            checkouts = int(df['late_checkout_pred_xgb'].sum())
+        else:
+            checkouts = 0
+        
         # Métricas principales en círculos
         col_metric1, col_metric2, col_metric3 = st.columns(3)
         
@@ -890,8 +900,8 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     margin: 0 auto;
                     background: transparent;
                 ">
-                    <div style="font-size: 32px; font-weight: bold;">{st.session_state.num_camareras}</div>
-                    <div style="font-size: 16px;">Camareras</div>
+                    <div style="font-size: 32px; font-weight: bold;">{checkouts}</div>
+                    <div style="font-size: 16px;">Check Out</div>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -900,7 +910,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         # Selector de número de camareras
         col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
         with col_control2:
-            st.markdown("### Ajustar personal")
+            st.markdown("### <div style='text-align: center;'>Ajustar personal</div>", unsafe_allow_html=True)
             col_plus, col_num, col_minus = st.columns([1, 2, 1])
             with col_plus:
                 if st.button("➕", key="btn_plus"):
@@ -929,16 +939,15 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         with col_res1:
             # Usar la mejor predicción disponible
             if 'late_checkout_pred_combinado' in df.columns:
-                checkouts = int(df['late_checkout_pred_combinado'].sum())
                 st.metric("Checkouts estimados (combinado)", checkouts)
             elif 'late_checkout_pred' in df.columns:
-                st.metric("Checkouts estimados (ANN)", int(df['late_checkout_pred'].sum()))
+                st.metric("Checkouts estimados (ANN)", checkouts)
             elif 'late_checkout_pred_xgb' in df.columns:
-                st.metric("Checkouts estimados (XGBoost)", int(df['late_checkout_pred_xgb'].sum()))
+                st.metric("Checkouts estimados (XGBoost)", checkouts)
             else:
                 st.metric("Checkouts estimados", 0)
         with col_res2:
-            st.metric("Repasos", len(df) - (int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0))
+            st.metric("Repasos", len(df) - checkouts)
         with col_res3:
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_res4:
