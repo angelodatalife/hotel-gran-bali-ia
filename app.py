@@ -1,6 +1,6 @@
 # =============================================================================
 # HOTEL GRAN BALI - SISTEMA IA DE GESTIÓN DE LIMPIEZA
-# Versión con mejoras en la vista Gerente (3 pestañas internas)
+# Versión con dataset enriquecido y vista Cliente
 # =============================================================================
 
 import streamlit as st
@@ -108,6 +108,7 @@ def limpiar_texto_opinion(texto):
     return texto
 
 def procesar_opinion(texto):
+    """Procesa una opinión y devuelve el sentimiento usando el modelo NLP"""
     if not texto or texto == "":
         return ""
     if modelos.get('nlp') is None:
@@ -242,6 +243,14 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     
     return asignacion
 
+def actualizar_dataset(hab_id, campo, valor):
+    """Actualiza una columna específica en el dataset para una habitación"""
+    if st.session_state.df_pms is not None:
+        df = st.session_state.df_pms
+        if hab_id in df['habitacion_id'].values:
+            df.loc[df['habitacion_id'] == hab_id, campo] = valor
+            st.session_state.df_pms = df
+
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (IZQUIERDA)
 # =============================================================================
@@ -291,6 +300,15 @@ with st.sidebar:
     with col3:
         st.markdown("")
     
+    # Cliente
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        cliente_selected = st.button("👤 Cliente", key="btn_cliente", use_container_width=True)
+    with col2:
+        st.markdown("")
+    with col3:
+        st.markdown("")
+    
     # Dataset
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
@@ -309,6 +327,8 @@ with st.sidebar:
         st.session_state.selected_page = "⚠️ Incidencias"
     elif mantenimiento_selected:
         st.session_state.selected_page = "🔧 Mantenimiento"
+    elif cliente_selected:
+        st.session_state.selected_page = "👤 Cliente"
     elif dataset_selected:
         st.session_state.selected_page = "📋 Dataset"
     
@@ -323,6 +343,12 @@ with st.sidebar:
     if archivo is not None and st.session_state.df_pms is None:
         with st.spinner("Procesando archivo..."):
             df = pd.read_csv(archivo)
+            
+            # Asegurar que existen las columnas necesarias
+            columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 'sentimiento_nlp']
+            for col in columnas_necesarias:
+                if col not in df.columns:
+                    df[col] = None
             
             # Aplicar ANN
             if modelos.get('ann') is not None:
@@ -494,7 +520,7 @@ if selected == "📊 Gerente":
             
             st.markdown("---")
             
-            # Información adicional (opcional)
+            # Información adicional
             st.subheader("📈 Resumen rápido")
             col_res1, col_res2, col_res3, col_res4 = st.columns(4)
             with col_res1:
@@ -833,10 +859,9 @@ elif selected == "🧹 Camarera":
                         if st.button("✅ Finalizar limpieza", type="primary", use_container_width=True, key="btn_finalizar_principal"):
                             tiempo_real = (datetime.now() - st.session_state.tiempo_inicio).seconds / 60
                             
-                            df = st.session_state.df_pms
+                            # Actualizar dataset con tiempo_real
                             hab_id = hab['habitacion_id']
-                            df.loc[df['habitacion_id'] == hab_id, 'tiempo_real'] = round(tiempo_real, 1)
-                            st.session_state.df_pms = df
+                            actualizar_dataset(hab_id, 'tiempo_real', round(tiempo_real, 1))
                             
                             st.session_state.habitaciones_completadas.append(hab_id)
                             
@@ -861,6 +886,9 @@ elif selected == "🧹 Camarera":
                         with col_rep1:
                             if st.button("Enviar y continuar", key="btn_reporte_continuar"):
                                 hab_id = hab['habitacion_id']
+                                
+                                # Guardar en el dataset
+                                actualizar_dataset(hab_id, 'incidencia_camarera', f"{tipo_reporte}: {desc_reporte}")
                                 
                                 # Mantenimiento: solo notifica, no afecta al cronómetro
                                 if tipo_reporte == "Mantenimiento (avería)":
@@ -1042,6 +1070,99 @@ elif selected == "🧹 Camarera":
                         st.divider()
 
 # =============================================================================
+# VISTA CLIENTE
+# =============================================================================
+
+elif selected == "👤 Cliente":
+    st.title("👤 Opinión de Clientes")
+    st.caption("Comparte tu experiencia para ayudarnos a mejorar")
+    
+    if st.session_state.df_pms is None:
+        st.warning("⚠️ El sistema no tiene datos de habitaciones cargados")
+    else:
+        df = st.session_state.df_pms
+        
+        with st.form("formulario_opinion_cliente"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Selector de habitación
+                habitaciones_disponibles = sorted(df['habitacion_id'].tolist())
+                habitacion = st.selectbox(
+                    "Número de habitación:",
+                    habitaciones_disponibles,
+                    index=None,
+                    placeholder="Selecciona tu habitación"
+                )
+            
+            with col2:
+                st.markdown("### 📝 Tu opinión")
+                st.markdown("Con respecto a la habitación:")
+            
+            # Pregunta principal
+            st.markdown("#### ¿En qué podríamos mejorar?")
+            opinion_texto = st.text_area(
+                "Escribe tu opinión aquí:",
+                placeholder="Ej: La habitación estaba muy limpia, pero el aire acondicionado hacía ruido...",
+                height=150
+            )
+            
+            # Botón de envío
+            submitted = st.form_submit_button("📤 Enviar opinión", use_container_width=True, type="primary")
+            
+            if submitted:
+                if not habitacion:
+                    st.error("❌ Por favor, selecciona tu número de habitación")
+                elif not opinion_texto:
+                    st.error("❌ Por favor, escribe tu opinión")
+                else:
+                    # Procesar la opinión con NLP
+                    sentimiento = procesar_opinion(opinion_texto)
+                    
+                    # Guardar en el dataset
+                    actualizar_dataset(habitacion, 'opinion_cliente', opinion_texto)
+                    actualizar_dataset(habitacion, 'sentimiento_nlp', sentimiento)
+                    
+                    # Guardar en el listado de opiniones
+                    st.session_state.opiniones.append({
+                        'habitacion': habitacion,
+                        'opinion': opinion_texto,
+                        'sentimiento': sentimiento,
+                        'timestamp': datetime.now().strftime("%H:%M"),
+                        'fecha': datetime.now().strftime("%d/%m/%Y")
+                    })
+                    
+                    # Mostrar resultado
+                    st.success(f"✅ ¡Gracias por tu opinión! Sentimiento detectado: **{sentimiento}**")
+                    
+                    # Mostrar emoji según sentimiento
+                    if sentimiento == 'positivo':
+                        st.balloons()
+                    elif sentimiento == 'negativo':
+                        st.snow()
+        
+        # Mostrar últimas opiniones
+        if st.session_state.opiniones:
+            st.markdown("---")
+            st.subheader("📋 Últimas opiniones recibidas")
+            
+            # Mostrar las 5 últimas opiniones
+            for op in reversed(st.session_state.opiniones[-5:]):
+                with st.container():
+                    cols = st.columns([1, 4])
+                    with cols[0]:
+                        if op['sentimiento'] == 'positivo':
+                            st.markdown("😊 **Positivo**")
+                        elif op['sentimiento'] == 'neutral':
+                            st.markdown("😐 **Neutral**")
+                        else:
+                            st.markdown("😞 **Negativo**")
+                    with cols[1]:
+                        st.markdown(f"**Hab {op['habitacion']}** - {op['timestamp']}")
+                        st.markdown(f"_{op['opinion'][:100]}...")
+                    st.divider()
+
+# =============================================================================
 # VISTA INCIDENCIAS
 # =============================================================================
 
@@ -1105,6 +1226,7 @@ elif selected == "📋 Dataset":
     else:
         df = st.session_state.df_pms.copy()
         
+        # Añadir opiniones al dataset (por si acaso)
         if st.session_state.opiniones:
             for op in st.session_state.opiniones:
                 mask = df['habitacion_id'] == op['habitacion']
@@ -1112,7 +1234,7 @@ elif selected == "📋 Dataset":
                     df.loc[mask, 'opinion_cliente'] = op['opinion']
                     df.loc[mask, 'sentimiento_nlp'] = op['sentimiento']
         
-        st.subheader("📊 Métricas")
+        st.subheader("📊 Métricas del dataset")
         col_met1, col_met2, col_met3, col_met4 = st.columns(4)
         with col_met1:
             st.metric("Registros", len(df))
