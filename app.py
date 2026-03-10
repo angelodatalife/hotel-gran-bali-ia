@@ -826,7 +826,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     with tab_dashboard:
         st.title("📊 Dashboard Gerente - Hotel Gran Bali")
         
-        # Calcular checkouts
+        # Obtener número de checkouts estimados
         if 'late_checkout_pred_combinado' in df.columns:
             checkouts = int(df['late_checkout_pred_combinado'].sum())
         elif 'late_checkout_pred' in df.columns:
@@ -907,29 +907,39 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 unsafe_allow_html=True
             )
         
-        # Selector de número de camareras
+        # Selector de número de camareras - CENTRADO Y MÁS CERCA
+        st.markdown("---")
         col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
         with col_control2:
-            st.markdown("### <div style='text-align: center;'>Ajustar personal</div>", unsafe_allow_html=True)
-            col_plus, col_num, col_minus = st.columns([1, 2, 1])
+            st.markdown("<h3 style='text-align: center; margin-bottom: 0px;'>Ajustar personal</h3>", unsafe_allow_html=True)
+            
+            # Contenedor centrado para los botones y el número
+            col_plus, col_num, col_minus = st.columns([1, 1, 1])
+            
             with col_plus:
-                if st.button("➕", key="btn_plus"):
+                st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                if st.button("➕", key="btn_plus", use_container_width=False):
                     st.session_state.num_camareras = min(50, st.session_state.num_camareras + 1)
                     st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
                         st.session_state.df_pms, 
                         st.session_state.num_camareras
                     )
                     st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+            
             with col_num:
-                st.markdown(f"<h2 style='text-align: center;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
+                st.markdown(f"<h2 style='text-align: center; margin: 0;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
+            
             with col_minus:
-                if st.button("➖", key="btn_minus"):
+                st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                if st.button("➖", key="btn_minus", use_container_width=False):
                     st.session_state.num_camareras = max(1, st.session_state.num_camareras - 1)
                     st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
                         st.session_state.df_pms, 
                         st.session_state.num_camareras
                     )
                     st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
         
         st.markdown("---")
         
@@ -939,15 +949,16 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         with col_res1:
             # Usar la mejor predicción disponible
             if 'late_checkout_pred_combinado' in df.columns:
+                checkouts = int(df['late_checkout_pred_combinado'].sum())
                 st.metric("Checkouts estimados (combinado)", checkouts)
             elif 'late_checkout_pred' in df.columns:
-                st.metric("Checkouts estimados (ANN)", checkouts)
+                st.metric("Checkouts estimados (ANN)", int(df['late_checkout_pred'].sum()))
             elif 'late_checkout_pred_xgb' in df.columns:
-                st.metric("Checkouts estimados (XGBoost)", checkouts)
+                st.metric("Checkouts estimados (XGBoost)", int(df['late_checkout_pred_xgb'].sum()))
             else:
                 st.metric("Checkouts estimados", 0)
         with col_res2:
-            st.metric("Repasos", len(df) - checkouts)
+            st.metric("Repasos", len(df) - (int(df['late_checkout_pred'].sum()) if 'late_checkout_pred' in df.columns else 0))
         with col_res3:
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_res4:
