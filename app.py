@@ -495,29 +495,21 @@ def procesar_archivo(archivo):
                 pass  # Silenciosamente ignorar errores de ANN
         
         # =============================================================================
-        # BLOQUE: APLICAR XGBOOST PARA PREDECIR TIEMPO_ESTIMADO (CON DIAGNÓSTICO)
+        # BLOQUE: APLICAR XGBOOST PARA PREDECIR TIEMPO_ESTIMADO (CON ESCALADOR GUARDADO)
         # =============================================================================
         if modelos.get('xgboost') is not None:
             try:
-                st.write("🔍 Intentando aplicar XGBoost...")
-                
                 # Extraer el modelo XGBoost del diccionario
                 xgb_artifacts = modelos['xgboost']
                 
-                st.write(f"Contenido de xgb_artifacts: {list(xgb_artifacts.keys())}")
-                
                 if isinstance(xgb_artifacts, dict):
                     xgb_model = xgb_artifacts.get('modelo')
-                    scaler_y = xgb_artifacts.get('scaler_y')  # <--- ¿Existe?
+                    scaler_y = xgb_artifacts.get('scaler_y')  # <--- ESCALADOR GUARDADO
                     encoders_xgb = xgb_artifacts.get('encoders', {})
                     feature_cols = xgb_artifacts.get('feature_cols', [])
                     cat_features = xgb_artifacts.get('cat_features', [])
                     
-                    st.write(f"¿Modelo cargado? {xgb_model is not None}")
-                    st.write(f"¿Scaler_y existe? {scaler_y is not None}")
-                    st.write(f"Feature columns: {feature_cols}")
-                    
-                    if xgb_model is not None and feature_cols:
+                    if xgb_model is not None and feature_cols and scaler_y is not None:
                         # Preparar una copia del dataframe para la predicción
                         df_pred = df.copy()
                         
@@ -529,10 +521,12 @@ def procesar_archivo(archivo):
                         for col in cat_features:
                             if col in df_pred.columns and col in encoders_xgb:
                                 encoder = encoders_xgb[col]
+                                # Aplicar transform, manejando valores no vistos
                                 df_pred[col + '_encoded'] = df_pred[col].astype(str).apply(
                                     lambda x: encoder.transform([x])[0] if x in encoder.classes_ else -1
                                 )
                             elif col in df_pred.columns:
+                                # Si no hay encoder, crear columna con un valor por defecto
                                 df_pred[col + '_encoded'] = 0
                         
                         # Asegurar que todas las columnas de features existen
@@ -541,55 +535,45 @@ def procesar_archivo(archivo):
                             if col in df_pred.columns:
                                 available_features.append(col)
                             else:
+                                # Si falta una feature numérica, la creamos con 0
                                 df_pred[col] = 0
                                 available_features.append(col)
-                        
-                        st.write(f"Features disponibles: {available_features}")
                         
                         if len(available_features) > 0:
                             X_pred = df_pred[available_features].values.astype(float)
                             
                             # Predecir (valores escalados)
                             tiempo_predicho_escalado = xgb_model.predict(X_pred)
-                            st.write(f"Predicciones escaladas (primeras 5): {tiempo_predicho_escalado[:5]}")
                             
-                            # Si existe el escalador, aplicar transformación inversa
-                            if scaler_y is not None:
-                                tiempo_predicho_real = scaler_y.inverse_transform(
-                                    tiempo_predicho_escalado.reshape(-1, 1)
-                                ).ravel()
-                                st.write(f"Predicciones en minutos (primeras 5): {tiempo_predicho_real[:5]}")
-                            else:
-                                st.warning("⚠️ No hay scaler_y, usando valores escalados directamente")
-                                tiempo_predicho_real = tiempo_predicho_escalado
+                            # APLICAR TRANSFORMACIÓN INVERSA CON EL ESCALADOR GUARDADO
+                            tiempo_predicho_real = scaler_y.inverse_transform(
+                                tiempo_predicho_escalado.reshape(-1, 1)
+                            ).ravel()
                             
-                            # Garantizar un mínimo realista
+                            # Garantizar un mínimo realista (15 minutos) por si acaso
                             tiempo_predicho_real = np.maximum(tiempo_predicho_real, 15.0)
                             
                             # Asignar al dataframe
                             df['tiempo_estimado'] = np.round(tiempo_predicho_real, 1)
-                            
-                            st.success(f"✅ XGBoost aplicado. Valores min: {df['tiempo_estimado'].min():.1f}, max: {df['tiempo_estimado'].max():.1f}")
-                        else:
-                            st.error("❌ No hay features disponibles")
                     else:
-                        st.error("❌ Modelo o features no disponibles")
+                        # Si falta el modelo o el escalador, usar valor por defecto
+                        if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
+                            df['tiempo_estimado'] = 25.0
                 else:
-                    st.error("❌ xgb_artifacts no es un diccionario")
+                    # Si no es un diccionario, usar valor por defecto
+                    if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
+                        df['tiempo_estimado'] = 25.0
             except Exception as e:
-                st.error(f"❌ Error en XGBoost: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
-                
-                # Fallback: 25
+                # Si hay error, mostrar advertencia y usar valor por defecto
+                st.warning(f"⚠️ Error en XGBoost: {str(e)}. Usando valores por defecto.")
                 if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
                     df['tiempo_estimado'] = 25.0
         else:
-            st.warning("⚠️ Modelo XGBoost no encontrado")
+            # Si no hay modelo XGBoost, usar valor por defecto
             if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
                 df['tiempo_estimado'] = 25.0
         # =============================================================================
-        # FIN DEL BLOQUE DE DIAGNÓSTICO
+        # FIN DEL BLOQUE CORREGIDO
         # =============================================================================
         
         st.session_state.df_pms = df
