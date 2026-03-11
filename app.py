@@ -134,6 +134,10 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
+# =============================================================================
+# FUNCIONES CORREGIDAS (ÚNICAS MODIFICACIONES)
+# =============================================================================
+
 def predecir_tiempo_xgboost(df):
     """Usa XGBoost para predecir el tiempo estimado de limpieza (llenar columna tiempo_estimado_xgb)"""
     # Verificar si el modelo XGBoost existe
@@ -161,25 +165,34 @@ def predecir_tiempo_xgboost(df):
             if col in df_copy.columns:
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         
-        # Preparar features para XGBoost
-        # Codificar variables categóricas si están disponibles
-        if encoders_xgb:
-            categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
-            for col in categorical_features:
-                if col in df_copy.columns and col in encoders_xgb:
-                    encoder = encoders_xgb[col]
-                    try:
-                        df_copy[col + '_encoded'] = encoder.transform(df_copy[col].astype(str))
-                    except:
-                        df_copy[col + '_encoded'] = 0
+        # 🔴 CORRECCIÓN 1: Crear las columnas codificadas con el mismo nombre que en entrenamiento
+        categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
+        for col in categorical_features:
+            if col in df_copy.columns and col in encoders_xgb:
+                encoder = encoders_xgb[col]
+                encoded_col_name = f'{col}_encoded'  # Este es el nombre usado en entrenamiento
+                try:
+                    df_copy[encoded_col_name] = encoder.transform(df_copy[col].astype(str))
+                except:
+                    # Si hay categorías nuevas, asignar -1 (como en entrenamiento)
+                    df_copy[encoded_col_name] = -1
         
-        # Seleccionar features disponibles
+        # 🔴 CORRECCIÓN 2: Seleccionar features disponibles usando los nombres exactos del entrenamiento
         available_features = []
+        missing_features = []
+        
         for col in feature_cols:
             if col in df_copy.columns:
                 available_features.append(col)
+            else:
+                missing_features.append(col)
+        
+        # Si faltan features críticas, mostrar advertencia pero continuar
+        if missing_features:
+            st.warning(f"⚠️ Features faltantes para XGBoost: {missing_features}")
         
         if len(available_features) < 2:
+            st.warning("⚠️ No hay suficientes features disponibles para XGBoost")
             return df
         
         X = df_copy[available_features].values.astype(float)
@@ -187,12 +200,15 @@ def predecir_tiempo_xgboost(df):
         # Predecir tiempo (regresión)
         tiempo_predicho = xgb_model.predict(X)
         
+        # 🔴 CORRECCIÓN 3: Asegurar que no haya valores negativos (mínimo 5 minutos)
+        tiempo_predicho = np.maximum(tiempo_predicho, 5)
+        
         # ASIGNAR a la columna tiempo_estimado_xgb (que viene vacía del CSV)
         df['tiempo_estimado_xgb'] = tiempo_predicho
         
         return df
     except Exception as e:
-        # Si falla, dejar la columna como estaba (vacía o con valores por defecto)
+        st.warning(f"⚠️ Error en predicción XGBoost: {str(e)}")
         return df
 
 def aplicar_kmeans(df):
@@ -224,17 +240,29 @@ def aplicar_kmeans(df):
         # Crear features por planta
         df_copy = df.copy()
         
-        # Calcular estadísticas por planta - USAR tiempo_estimado_xgb
-        planta_stats = df_copy.groupby('planta').agg({
-            'tiempo_estimado_xgb': 'mean',
+        # 🔴 CORRECCIÓN 4: Usar columna correcta para tiempo
+        tiempo_col = 'tiempo_estimado_xgb' if 'tiempo_estimado_xgb' in df_copy.columns else 'tiempo_estimado'
+        
+        # Calcular estadísticas por planta
+        agg_dict = {
+            tiempo_col: 'mean',
             'late_checkout': 'mean',
             'noches_estancia': 'mean',
             'num_huespedes': 'mean',
             'tiene_ninos': 'mean'
-        }).reset_index()
+        }
+        # Filtrar solo columnas que existen
+        agg_dict = {k: v for k, v in agg_dict.items() if k in df_copy.columns}
         
-        planta_stats.columns = ['planta', 'tiempo_promedio', 'tasa_late_checkout', 
-                               'noches_promedio', 'huespedes_promedio', 'tasa_ninos']
+        planta_stats = df_copy.groupby('planta').agg(agg_dict).reset_index()
+        
+        # Renombrar columnas
+        rename_dict = {tiempo_col: 'tiempo_promedio'}
+        for col in agg_dict.keys():
+            if col != tiempo_col and col in planta_stats.columns:
+                rename_dict[col] = col.replace('_', '_promedio') if col not in ['late_checkout', 'tiene_ninos'] else col
+        
+        planta_stats = planta_stats.rename(columns=rename_dict)
         
         # Añadir características adicionales
         planta_stats['sector_num'] = planta_stats['planta'].apply(
@@ -245,8 +273,10 @@ def aplicar_kmeans(df):
         )
         
         # Seleccionar features para clustering
-        feature_cols = ['planta', 'tiempo_promedio', 'tasa_late_checkout',
-                       'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
+        feature_cols = ['planta', 'tiempo_promedio', 'tasa_late_checkout' if 'tasa_late_checkout' in planta_stats.columns else 'late_checkout',
+                       'noches_promedio' if 'noches_promedio' in planta_stats.columns else 'noches_estancia',
+                       'huespedes_promedio' if 'huespedes_promedio' in planta_stats.columns else 'num_huespedes',
+                       'tasa_ninos' if 'tasa_ninos' in planta_stats.columns else 'tiene_ninos',
                        'sector_num', 'num_habitaciones']
         
         # Verificar que todas las columnas existen
@@ -306,17 +336,16 @@ def predecir_late_checkout_xgboost(df):
             if col in df_copy.columns:
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         
-        # Preparar features para XGBoost
-        # Codificar variables categóricas si están disponibles
-        if encoders_xgb:
-            categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
-            for col in categorical_features:
-                if col in df_copy.columns and col in encoders_xgb:
-                    encoder = encoders_xgb[col]
-                    try:
-                        df_copy[col + '_encoded'] = encoder.transform(df_copy[col].astype(str))
-                    except:
-                        df_copy[col + '_encoded'] = 0
+        # 🔴 CORRECCIÓN 5: Usar mismo enfoque que en predecir_tiempo_xgboost
+        categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
+        for col in categorical_features:
+            if col in df_copy.columns and col in encoders_xgb:
+                encoder = encoders_xgb[col]
+                encoded_col_name = f'{col}_encoded'
+                try:
+                    df_copy[encoded_col_name] = encoder.transform(df_copy[col].astype(str))
+                except:
+                    df_copy[encoded_col_name] = -1
         
         # Seleccionar features disponibles
         available_features = []
