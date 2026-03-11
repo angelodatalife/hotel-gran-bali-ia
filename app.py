@@ -553,8 +553,14 @@ def procesar_archivo(archivo):
                             # Garantizar un mínimo realista (15 minutos) por si acaso
                             tiempo_predicho_real = np.maximum(tiempo_predicho_real, 15.0)
                             
-                            # Asignar al dataframe
+                            # Asignar al dataframe (primero en tiempo_estimado)
                             df['tiempo_estimado'] = np.round(tiempo_predicho_real, 1)
+                            
+                            # =========================================================
+                            # NUEVO: Cambiar nombre de la columna a tiempo_estimado_xgb
+                            # =========================================================
+                            df.rename(columns={'tiempo_estimado': 'tiempo_estimado_xgb'}, inplace=True)
+                            # =========================================================
                     else:
                         # Si falta el modelo o el escalador, usar valor por defecto
                         if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
@@ -1112,8 +1118,8 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                             # Buscar información adicional
                             tooltip = f"Hab {hab_id}"
                             row = df_sector[df_sector['habitacion_id'] == hab_id].iloc[0]
-                            if 'tiempo_estimado' in row:
-                                tooltip += f"\nTiempo: {row['tiempo_estimado']} min"
+                            if 'tiempo_estimado_xgb' in row:
+                                tooltip += f"\nTiempo: {row['tiempo_estimado_xgb']} min"
                             if st.session_state.cluster_habitaciones and hab_id in st.session_state.cluster_habitaciones:
                                 cluster = st.session_state.cluster_habitaciones[hab_id]
                                 tooltip += f"\nPerfil: {cluster}"
@@ -1427,8 +1433,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         minutos = tiempo_transcurrido // 60
                         segundos = tiempo_transcurrido % 60
                         st.markdown(f"**Tiempo:** {minutos}:{segundos:02d}")
-                        if 'tiempo_estimado' in hab:
-                            progreso = min(tiempo_transcurrido / (hab['tiempo_estimado'] * 60), 1.0)
+                        if 'tiempo_estimado_xgb' in hab:
+                            progreso = min(tiempo_transcurrido / (hab['tiempo_estimado_xgb'] * 60), 1.0)
                             st.progress(progreso)
                     
                     with col_crono3:
@@ -1536,8 +1542,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     if inc:
                                         st.markdown(f"**{inc['tipo']}**")
                                 with cols[2]:
-                                    if 'tiempo_estimado' in row:
-                                        st.markdown(f"⏱️ {row['tiempo_estimado']} min")
+                                    if 'tiempo_estimado_xgb' in row:
+                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']} min")
                                 with cols[3]:
                                     if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
@@ -1609,8 +1615,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     st.markdown("🛏️ **Normal**")
                             
                             with cols[2]:
-                                if 'tiempo_estimado' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
+                                if 'tiempo_estimado_xgb' in row:
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']} min**")
                             
                             with cols[3]:
                                 # Botón simple sin disabled
@@ -1661,8 +1667,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                 st.markdown("~~Normal~~")
                         
                         with cols[2]:
-                            if 'tiempo_estimado' in row:
-                                st.markdown(f"~~{row['tiempo_estimado']} min~~")
+                            if 'tiempo_estimado_xgb' in row:
+                                st.markdown(f"~~{row['tiempo_estimado_xgb']} min~~")
                         
                         with cols[3]:
                             if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
