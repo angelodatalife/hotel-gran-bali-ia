@@ -960,6 +960,70 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     with tab_estado:
         st.title("🗺️ Estado de Habitaciones")
         
+        # =========================================================
+        # NUEVO: Leyenda justo debajo del título
+        # =========================================================
+        st.markdown("### 📋 Leyenda")
+        col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
+        
+        with col_leg1:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: transparent; border: 2px solid #ddd; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Pendiente</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg2:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #4CAF50; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Completada</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg3:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #808080; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Mantenimiento</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg4:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #FFA500; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Falta suministros</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with col_leg5:
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #FF4444; border-radius: 4px; margin-right: 8px;"></div>
+                    <span>Muy sucia / Ocupada</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.markdown("---")
+        # =========================================================
+        
         # Definir sectores
         sectores = {
             'Bajo (Pl 2-15)': list(range(2, 16)),
@@ -1051,65 +1115,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                             col.markdown("")  # Celda vacía
         
         st.markdown("---")
-        
-        # Leyenda de colores
-        st.subheader("📋 Leyenda")
-        col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
-        
-        with col_leg1:
-            st.markdown(
-                """
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: transparent; border: 2px solid #ddd; border-radius: 4px; margin-right: 8px;"></div>
-                    <span>Pendiente</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        with col_leg2:
-            st.markdown(
-                """
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #4CAF50; border-radius: 4px; margin-right: 8px;"></div>
-                    <span>Completada</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        with col_leg3:
-            st.markdown(
-                """
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #808080; border-radius: 4px; margin-right: 8px;"></div>
-                    <span>Mantenimiento</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        with col_leg4:
-            st.markdown(
-                """
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #FFA500; border-radius: 4px; margin-right: 8px;"></div>
-                    <span>Falta suministros</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        with col_leg5:
-            st.markdown(
-                """
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #FF4444; border-radius: 4px; margin-right: 8px;"></div>
-                    <span>Muy sucia / Ocupada</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
     
     # ===== PESTAÑA 3: CARGA DE TRABAJO POR CAMARERA =====
     with tab_carga:
@@ -1388,6 +1393,9 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                         'reportado_por': st.session_state.camarera_actual
                                     })
                                     st.success("🔧 Reporte enviado a Mantenimiento")
+                                    # =========================================================
+                                    # NUEVO: Contraer el expander después de enviar
+                                    # =========================================================
                                     st.session_state.reporte_expander_open = False
                                     st.rerun()
                                 
@@ -1412,6 +1420,9 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     # Reiniciar cronómetro (para nueva habitación)
                                     st.session_state.cronometro_activo = False
                                     st.session_state.habitacion_actual = None
+                                    # =========================================================
+                                    # NUEVO: Contraer el expander después de enviar
+                                    # =========================================================
                                     st.session_state.reporte_expander_open = False
                                     time.sleep(1)
                                     st.rerun()
@@ -1447,7 +1458,10 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                         st.markdown(f"**{inc['tipo']}**")
                                 with cols[2]:
                                     if 'tiempo_estimado_xgb' in row:
-                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']} min")
+                                        # =========================================================
+                                        # NUEVO: Mostrar con 2 decimales
+                                        # =========================================================
+                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")
                                 with cols[3]:
                                     if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
@@ -1520,7 +1534,10 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                             
                             with cols[2]:
                                 if 'tiempo_estimado_xgb' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']} min**")
+                                    # =========================================================
+                                    # NUEVO: Mostrar con 2 decimales
+                                    # =========================================================
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")
                             
                             with cols[3]:
                                 # Botón simple sin disabled
@@ -1572,7 +1589,10 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         
                         with cols[2]:
                             if 'tiempo_estimado_xgb' in row:
-                                st.markdown(f"~~{row['tiempo_estimado_xgb']} min~~")
+                                # =========================================================
+                                # NUEVO: Mostrar con 2 decimales
+                                # =========================================================
+                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")
                         
                         with cols[3]:
                             if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
