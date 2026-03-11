@@ -134,83 +134,6 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
-# =============================================================================
-# FUNCIONES CORREGIDAS (ÚNICAS MODIFICACIONES)
-# =============================================================================
-
-def predecir_tiempo_xgboost(df):
-    """Usa XGBoost para predecir el tiempo estimado de limpieza (llenar columna tiempo_estimado_xgb)"""
-    # Verificar si el modelo XGBoost existe
-    if modelos.get('xgboost') is None or df is None or len(df) == 0:
-        return df
-    
-    try:
-        # Extraer el modelo XGBoost del diccionario
-        xgb_artifacts = modelos['xgboost']
-        
-        if not isinstance(xgb_artifacts, dict):
-            return df
-        
-        xgb_model = xgb_artifacts.get('modelo')
-        encoders_xgb = xgb_artifacts.get('encoders', {})
-        feature_cols = xgb_artifacts.get('feature_cols', [])
-        
-        if xgb_model is None:
-            return df
-        
-        df_copy = df.copy()
-        
-        # Limpiar valores NaN
-        for col in ['noches_estancia', 'num_huespedes', 'planta']:
-            if col in df_copy.columns:
-                df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
-        
-        # 🔴 CORRECCIÓN 1: Crear las columnas codificadas con el mismo nombre que en entrenamiento
-        categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
-        for col in categorical_features:
-            if col in df_copy.columns and col in encoders_xgb:
-                encoder = encoders_xgb[col]
-                encoded_col_name = f'{col}_encoded'  # Este es el nombre usado en entrenamiento
-                try:
-                    df_copy[encoded_col_name] = encoder.transform(df_copy[col].astype(str))
-                except:
-                    # Si hay categorías nuevas, asignar -1 (como en entrenamiento)
-                    df_copy[encoded_col_name] = -1
-        
-        # 🔴 CORRECCIÓN 2: Seleccionar features disponibles usando los nombres exactos del entrenamiento
-        available_features = []
-        missing_features = []
-        
-        for col in feature_cols:
-            if col in df_copy.columns:
-                available_features.append(col)
-            else:
-                missing_features.append(col)
-        
-        # Si faltan features críticas, mostrar advertencia pero continuar
-        if missing_features:
-            st.warning(f"⚠️ Features faltantes para XGBoost: {missing_features}")
-        
-        if len(available_features) < 2:
-            st.warning("⚠️ No hay suficientes features disponibles para XGBoost")
-            return df
-        
-        X = df_copy[available_features].values.astype(float)
-        
-        # Predecir tiempo (regresión)
-        tiempo_predicho = xgb_model.predict(X)
-        
-        # 🔴 CORRECCIÓN 3: Asegurar que no haya valores negativos (mínimo 5 minutos)
-        tiempo_predicho = np.maximum(tiempo_predicho, 5)
-        
-        # ASIGNAR a la columna tiempo_estimado_xgb (que viene vacía del CSV)
-        df['tiempo_estimado_xgb'] = tiempo_predicho
-        
-        return df
-    except Exception as e:
-        st.warning(f"⚠️ Error en predicción XGBoost: {str(e)}")
-        return df
-
 def aplicar_kmeans(df):
     """Aplica K-Means para segmentar habitaciones por perfil de limpieza"""
     # Verificar si el modelo K-Means existe y es accesible
@@ -240,29 +163,17 @@ def aplicar_kmeans(df):
         # Crear features por planta
         df_copy = df.copy()
         
-        # 🔴 CORRECCIÓN 4: Usar columna correcta para tiempo
-        tiempo_col = 'tiempo_estimado_xgb' if 'tiempo_estimado_xgb' in df_copy.columns else 'tiempo_estimado'
-        
         # Calcular estadísticas por planta
-        agg_dict = {
-            tiempo_col: 'mean',
+        planta_stats = df_copy.groupby('planta').agg({
+            'tiempo_estimado': 'mean',
             'late_checkout': 'mean',
             'noches_estancia': 'mean',
             'num_huespedes': 'mean',
             'tiene_ninos': 'mean'
-        }
-        # Filtrar solo columnas que existen
-        agg_dict = {k: v for k, v in agg_dict.items() if k in df_copy.columns}
+        }).reset_index()
         
-        planta_stats = df_copy.groupby('planta').agg(agg_dict).reset_index()
-        
-        # Renombrar columnas
-        rename_dict = {tiempo_col: 'tiempo_promedio'}
-        for col in agg_dict.keys():
-            if col != tiempo_col and col in planta_stats.columns:
-                rename_dict[col] = col.replace('_', '_promedio') if col not in ['late_checkout', 'tiene_ninos'] else col
-        
-        planta_stats = planta_stats.rename(columns=rename_dict)
+        planta_stats.columns = ['planta', 'tiempo_promedio', 'tasa_late_checkout', 
+                               'noches_promedio', 'huespedes_promedio', 'tasa_ninos']
         
         # Añadir características adicionales
         planta_stats['sector_num'] = planta_stats['planta'].apply(
@@ -273,10 +184,8 @@ def aplicar_kmeans(df):
         )
         
         # Seleccionar features para clustering
-        feature_cols = ['planta', 'tiempo_promedio', 'tasa_late_checkout' if 'tasa_late_checkout' in planta_stats.columns else 'late_checkout',
-                       'noches_promedio' if 'noches_promedio' in planta_stats.columns else 'noches_estancia',
-                       'huespedes_promedio' if 'huespedes_promedio' in planta_stats.columns else 'num_huespedes',
-                       'tasa_ninos' if 'tasa_ninos' in planta_stats.columns else 'tiene_ninos',
+        feature_cols = ['planta', 'tiempo_promedio', 'tasa_late_checkout',
+                       'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
                        'sector_num', 'num_habitaciones']
         
         # Verificar que todas las columnas existen
@@ -336,16 +245,17 @@ def predecir_late_checkout_xgboost(df):
             if col in df_copy.columns:
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         
-        # 🔴 CORRECCIÓN 5: Usar mismo enfoque que en predecir_tiempo_xgboost
-        categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
-        for col in categorical_features:
-            if col in df_copy.columns and col in encoders_xgb:
-                encoder = encoders_xgb[col]
-                encoded_col_name = f'{col}_encoded'
-                try:
-                    df_copy[encoded_col_name] = encoder.transform(df_copy[col].astype(str))
-                except:
-                    df_copy[encoded_col_name] = -1
+        # Preparar features para XGBoost
+        # Codificar variables categóricas si están disponibles
+        if encoders_xgb:
+            categorical_features = ['sector', 'tipo_habitacion', 'nacionalidad', 'segmento']
+            for col in categorical_features:
+                if col in df_copy.columns and col in encoders_xgb:
+                    encoder = encoders_xgb[col]
+                    try:
+                        df_copy[col + '_encoded'] = encoder.transform(df_copy[col].astype(str))
+                    except:
+                        df_copy[col + '_encoded'] = 0
         
         # Seleccionar features disponibles
         available_features = []
@@ -383,7 +293,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     df_asignar = df.copy()
     
     # Limpiar valores NaN en columnas importantes
-    for col in ['planta', 'habitacion_id', 'tiempo_estimado_xgb']:
+    for col in ['planta', 'habitacion_id', 'tiempo_estimado']:
         if col in df_asignar.columns:
             df_asignar[col] = pd.to_numeric(df_asignar[col], errors='coerce').fillna(0)
     
@@ -398,12 +308,12 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     
     plantas_totales = sorted(df_asignar['planta'].unique())
     
-    # 1. Calcular carga por planta - USAR tiempo_estimado_xgb
+    # 1. Calcular carga por planta
     carga_por_planta = {}
     for planta in plantas_totales:
         df_planta = df_asignar[df_asignar['planta'] == planta]
-        if 'tiempo_estimado_xgb' in df_planta.columns:
-            carga_por_planta[planta] = df_planta['tiempo_estimado_xgb'].sum()
+        if 'tiempo_estimado' in df_planta.columns:
+            carga_por_planta[planta] = df_planta['tiempo_estimado'].sum()
         else:
             carga_por_planta[planta] = len(df_planta) * 25
     
@@ -558,9 +468,6 @@ def procesar_archivo(archivo):
         for col in ['planta', 'habitacion_id', 'noches_estancia', 'num_huespedes']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
-        # APLICAR XGBOOST PARA PREDECIR TIEMPOS (llenar tiempo_estimado_xgb)
-        df = predecir_tiempo_xgboost(df)
         
         # Aplicar ANN
         if modelos.get('ann') is not None:
@@ -1123,8 +1030,8 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                             # Buscar información adicional
                             tooltip = f"Hab {hab_id}"
                             row = df_sector[df_sector['habitacion_id'] == hab_id].iloc[0]
-                            if 'tiempo_estimado_xgb' in row:
-                                tooltip += f"\nTiempo: {row['tiempo_estimado_xgb']:.1f} min"
+                            if 'tiempo_estimado' in row:
+                                tooltip += f"\nTiempo: {row['tiempo_estimado']} min"
                             if st.session_state.cluster_habitaciones and hab_id in st.session_state.cluster_habitaciones:
                                 cluster = st.session_state.cluster_habitaciones[hab_id]
                                 tooltip += f"\nPerfil: {cluster}"
@@ -1438,9 +1345,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         minutos = tiempo_transcurrido // 60
                         segundos = tiempo_transcurrido % 60
                         st.markdown(f"**Tiempo:** {minutos}:{segundos:02d}")
-                        if 'tiempo_estimado_xgb' in hab:
-                            # Usar tiempo_estimado_xgb para la barra de progreso
-                            progreso = min(tiempo_transcurrido / (hab['tiempo_estimado_xgb'] * 60), 1.0)
+                        if 'tiempo_estimado' in hab:
+                            progreso = min(tiempo_transcurrido / (hab['tiempo_estimado'] * 60), 1.0)
                             st.progress(progreso)
                     
                     with col_crono3:
@@ -1548,8 +1454,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     if inc:
                                         st.markdown(f"**{inc['tipo']}**")
                                 with cols[2]:
-                                    if 'tiempo_estimado_xgb' in row:
-                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.1f} min")
+                                    if 'tiempo_estimado' in row:
+                                        st.markdown(f"⏱️ {row['tiempo_estimado']} min")
                                 with cols[3]:
                                     if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
@@ -1621,8 +1527,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     st.markdown("🛏️ **Normal**")
                             
                             with cols[2]:
-                                if 'tiempo_estimado_xgb' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.1f} min**")
+                                if 'tiempo_estimado' in row:
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado']} min**")
                             
                             with cols[3]:
                                 # Botón simple sin disabled
@@ -1673,8 +1579,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                 st.markdown("~~Normal~~")
                         
                         with cols[2]:
-                            if 'tiempo_estimado_xgb' in row:
-                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.1f} min~~")
+                            if 'tiempo_estimado' in row:
+                                st.markdown(f"~~{row['tiempo_estimado']} min~~")
                         
                         with cols[3]:
                             if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
