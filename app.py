@@ -494,6 +494,68 @@ def procesar_archivo(archivo):
             except Exception as e:
                 pass  # Silenciosamente ignorar errores de ANN
         
+        # =============================================================================
+        # NUEVO BLOQUE: APLICAR XGBOOST PARA PREDECIR TIEMPO_ESTIMADO
+        # =============================================================================
+        if modelos.get('xgboost') is not None:
+            try:
+                # Extraer el modelo XGBoost del diccionario
+                xgb_artifacts = modelos['xgboost']
+                
+                if isinstance(xgb_artifacts, dict):
+                    xgb_model = xgb_artifacts.get('modelo')
+                    encoders_xgb = xgb_artifacts.get('encoders', {})
+                    feature_cols = xgb_artifacts.get('feature_cols', [])
+                    cat_features = xgb_artifacts.get('cat_features', [])
+                    
+                    if xgb_model is not None and feature_cols:
+                        # Preparar una copia del dataframe para la predicción
+                        df_pred = df.copy()
+                        
+                        # Codificar las variables categóricas usando los encoders guardados
+                        for col in cat_features:
+                            if col in df_pred.columns and col in encoders_xgb:
+                                encoder = encoders_xgb[col]
+                                # Aplicar transform, manejando valores no vistos
+                                df_pred[col + '_encoded'] = df_pred[col].astype(str).apply(
+                                    lambda x: encoder.transform([x])[0] if x in encoder.classes_ else -1
+                                )
+                            elif col in df_pred.columns:
+                                # Si no hay encoder, crear columna con un valor por defecto
+                                df_pred[col + '_encoded'] = 0
+                        
+                        # Asegurar que todas las columnas de features existen
+                        available_features = []
+                        for col in feature_cols:
+                            if col in df_pred.columns:
+                                available_features.append(col)
+                            else:
+                                # Si falta una feature numérica, la creamos con 0
+                                df_pred[col] = 0
+                                available_features.append(col)
+                        
+                        if len(available_features) > 0:
+                            X_pred = df_pred[available_features].values.astype(float)
+                            
+                            # Predecir y redondear a 1 decimal
+                            tiempo_predicho = xgb_model.predict(X_pred)
+                            df['tiempo_estimado'] = np.round(tiempo_predicho, 1)
+                            st.success("✅ Predicciones de tiempo de limpieza (XGBoost) aplicadas.")
+            except Exception as e:
+                # Si falla, mostrar un warning suave
+                st.warning(f"⚠️ No se pudo aplicar XGBoost para el tiempo estimado. Usando valores por defecto. Error: {e}")
+                # Fallback: asignar un tiempo por defecto si todo falla
+                if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
+                    df['tiempo_estimado'] = 25.0
+        else:
+            # Si no hay modelo XGBoost, asegurar que la columna tiene un valor por defecto
+            if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
+                df['tiempo_estimado'] = 25.0
+                st.info("ℹ️ Modelo XGBoost no encontrado. Usando tiempo estimado por defecto (25 min).")
+        # =============================================================================
+        # FIN DEL NUEVO BLOQUE
+        # =============================================================================
+        
         st.session_state.df_pms = df
         
         with st.spinner("Calculando asignación por bloques adyacentes..."):
