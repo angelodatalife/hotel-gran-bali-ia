@@ -559,7 +559,7 @@ def mostrar_pantalla_inicio():
             unsafe_allow_html=True
         )
         
-        # Mostrar modelos en fila (centrados)
+        # Mostrar modelos en fila (centrados) SIN FONDOS BLANCOS
         col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
         
         with col_mod1:
@@ -911,13 +911,13 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         st.markdown("---")
         col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
         with col_control2:
-            st.markdown("<h3 style='text-align: center; margin-bottom: 0px;'>Ajustar personal</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>Ajustar personal</h3>", unsafe_allow_html=True)
             
-            # Contenedor centrado para los botones y el número
+            # Contenedor centrado para los botones y el número con columnas EQUIDISTANTES
             col_plus, col_num, col_minus = st.columns([1, 1, 1])
             
             with col_plus:
-                st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                st.markdown("<div style='display: flex; justify-content: center;'>", unsafe_allow_html=True)
                 if st.button("➕", key="btn_plus", use_container_width=False):
                     st.session_state.num_camareras = min(50, st.session_state.num_camareras + 1)
                     st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
@@ -931,7 +931,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 st.markdown(f"<h2 style='text-align: center; margin: 0;'>{st.session_state.num_camareras}</h2>", unsafe_allow_html=True)
             
             with col_minus:
-                st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+                st.markdown("<div style='display: flex; justify-content: center;'>", unsafe_allow_html=True)
                 if st.button("➖", key="btn_minus", use_container_width=False):
                     st.session_state.num_camareras = max(1, st.session_state.num_camareras - 1)
                     st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(
@@ -963,31 +963,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
             st.metric("Incidencias", len(st.session_state.incidencias))
         with col_res4:
             st.metric("Mantenimiento", len(st.session_state.mantenimiento))
-        
-        # Información de modelos utilizados
-        st.subheader("🤖 Modelos activos en esta sesión")
-        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
-        with col_mod1:
-            if modelos.get('ann') is not None:
-                st.success("✅ ANN: Prediciendo late checkout")
-            else:
-                st.warning("❌ ANN no disponible")
-        with col_mod2:
-            if modelos.get('xgboost') is not None:
-                st.success("✅ XGBoost: Mejorando predicciones")
-            else:
-                st.warning("❌ XGBoost no disponible")
-        with col_mod3:
-            if modelos.get('kmeans') is not None and st.session_state.cluster_habitaciones:
-                num_clusters = len(set(st.session_state.cluster_habitaciones.values()))
-                st.success(f"✅ K-Means: {num_clusters} perfiles de limpieza")
-            else:
-                st.warning("❌ K-Means no disponible")
-        with col_mod4:
-            if modelos.get('nlp') is not None:
-                st.success("✅ NLP: Análisis de opiniones")
-            else:
-                st.warning("❌ NLP no disponible")
     
     # ===== PESTAÑA 2: ESTADO DE HABITACIONES (MAPA DE COLORES) =====
     with tab_estado:
