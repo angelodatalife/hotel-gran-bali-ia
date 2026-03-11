@@ -495,7 +495,7 @@ def procesar_archivo(archivo):
                 pass  # Silenciosamente ignorar errores de ANN
         
         # =============================================================================
-        # BLOQUE: APLICAR XGBOOST PARA PREDECIR TIEMPO_ESTIMADO (CORREGIDO)
+        # BLOQUE: APLICAR XGBOOST PARA PREDECIR TIEMPO_ESTIMADO (CON ESCALADOR GUARDADO)
         # =============================================================================
         if modelos.get('xgboost') is not None:
             try:
@@ -504,11 +504,12 @@ def procesar_archivo(archivo):
                 
                 if isinstance(xgb_artifacts, dict):
                     xgb_model = xgb_artifacts.get('modelo')
+                    scaler_y = xgb_artifacts.get('scaler_y')  # <--- ESCALADOR GUARDADO
                     encoders_xgb = xgb_artifacts.get('encoders', {})
                     feature_cols = xgb_artifacts.get('feature_cols', [])
                     cat_features = xgb_artifacts.get('cat_features', [])
                     
-                    if xgb_model is not None and feature_cols:
+                    if xgb_model is not None and feature_cols and scaler_y is not None:
                         # Preparar una copia del dataframe para la predicción
                         df_pred = df.copy()
                         
@@ -544,34 +545,18 @@ def procesar_archivo(archivo):
                             # Predecir (valores escalados)
                             tiempo_predicho_escalado = xgb_model.predict(X_pred)
                             
-                            # CORRECCIÓN: Mapear de vuelta a minutos reales
-                            # Basado en los datos de entrenamiento donde el tiempo mínimo era ~18 min y máximo ~45 min
-                            # y las predicciones escaladas tienen media ~0.5 y rango -2 a 12
+                            # APLICAR TRANSFORMACIÓN INVERSA CON EL ESCALADOR GUARDADO
+                            tiempo_predicho_real = scaler_y.inverse_transform(
+                                tiempo_predicho_escalado.reshape(-1, 1)
+                            ).ravel()
                             
-                            # Parámetros de transformación (ajustados según los logs)
-                            min_escalado = -2.2
-                            max_escalado = 12.0
-                            min_real = 18.0
-                            max_real = 45.0
-                            
-                            # Transformación lineal: real = pendiente * escalado + intercepto
-                            pendiente = (max_real - min_real) / (max_escalado - min_escalado)
-                            intercepto = min_real - pendiente * min_escalado
-                            
-                            tiempo_predicho_real = pendiente * tiempo_predicho_escalado + intercepto
-                            
-                            # Garantizar un mínimo realista (15 minutos)
+                            # Garantizar un mínimo realista (15 minutos) por si acaso
                             tiempo_predicho_real = np.maximum(tiempo_predicho_real, 15.0)
                             
                             # Asignar al dataframe
                             df['tiempo_estimado'] = np.round(tiempo_predicho_real, 1)
-                            
-                            # Verificar resultados (opcional, puedes comentar estas líneas después de verificar)
-                            negativos = (df['tiempo_estimado'] < 0).sum()
-                            if negativos > 0:
-                                st.warning(f"⚠️ Se corrigieron {negativos} valores negativos.")
                     else:
-                        # Si el modelo no es válido, usar valor por defecto
+                        # Si falta el escalador, usar valor por defecto
                         if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
                             df['tiempo_estimado'] = 25.0
                 else:
