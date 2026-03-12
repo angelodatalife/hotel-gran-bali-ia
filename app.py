@@ -719,7 +719,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <div style="position: absolute; top: -20px; left: -20px; z-index: 999;">
-            <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 4rem;">
+            <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 10rem;">
                 Check it Out! <br>
                 <span style="font-size: 0.7em; display: block;">Hotel Clean App</span>
             </h2>
