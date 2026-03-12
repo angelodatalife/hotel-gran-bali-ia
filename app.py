@@ -102,6 +102,12 @@ if 'label_encoders' not in st.session_state:
     st.session_state.label_encoders = {}  # Para codificar variables categóricas
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
+# =============================================================================
+# NUEVO: Controlar si ya se mostró la animación de bienvenida
+# =============================================================================
+if 'bienvenida_mostrada' not in st.session_state:
+    st.session_state.bienvenida_mostrada = False
+# =============================================================================
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -163,9 +169,6 @@ def aplicar_kmeans(df):
         # Crear features por planta
         df_copy = df.copy()
         
-        # =========================================================================
-        # MODIFICADO: Añadir 'is_checkout' a las estadísticas por planta
-        # =========================================================================
         # Calcular estadísticas por planta
         agg_dict = {
             'tiempo_estimado_xgb': 'mean',
@@ -188,7 +191,6 @@ def aplicar_kmeans(df):
             column_names.insert(3, 'tasa_checkout')  # Insertar después de tasa_late_checkout
         
         planta_stats.columns = column_names
-        # =========================================================================
         
         # Añadir características adicionales
         planta_stats['sector_num'] = planta_stats['planta'].apply(
@@ -416,17 +418,39 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
-        # Ordenar por prioridad (late checkout) y cluster (profundidad de limpieza)
-        if 'cluster' in df_bloque.columns:
-            df_bloque = df_bloque.sort_values(
-                by=[col_prioridad, 'cluster', 'habitacion_id'], 
-                ascending=[False, False, True]
-            )
+        # =========================================================================
+        # MODIFICADO: Ordenar por prioridad: primero check-out, luego stay-over
+        # =========================================================================
+        # Añadir columna auxiliar para ordenar (check-out primero = 0, stay-over = 1)
+        if 'is_checkout' in df_bloque.columns:
+            df_bloque['prioridad_checkout'] = df_bloque['is_checkout'].apply(lambda x: 0 if x == 1 else 1)
         else:
-            df_bloque = df_bloque.sort_values(
-                by=[col_prioridad, 'habitacion_id'], 
-                ascending=[False, True]
-            )
+            df_bloque['prioridad_checkout'] = 1  # Si no hay columna, tratar como stay-over
+        
+        # Ordenar: primero prioridad_checkout (0=check-out), luego col_prioridad, luego cluster, luego habitacion_id
+        sort_columns = ['prioridad_checkout']
+        sort_ascending = [True]  # True = 0 primero, luego 1
+        
+        if col_prioridad in df_bloque.columns:
+            sort_columns.append(col_prioridad)
+            sort_ascending.append(False)  # Mayor prioridad primero
+        
+        if 'cluster' in df_bloque.columns:
+            sort_columns.append('cluster')
+            sort_ascending.append(False)  # Mayor cluster primero (limpieza profunda)
+        
+        sort_columns.append('habitacion_id')
+        sort_ascending.append(True)  # Menor número de habitación primero
+        
+        df_bloque = df_bloque.sort_values(
+            by=sort_columns, 
+            ascending=sort_ascending
+        )
+        
+        # Eliminar columna auxiliar
+        if 'prioridad_checkout' in df_bloque.columns:
+            df_bloque = df_bloque.drop(columns=['prioridad_checkout'])
+        # =========================================================================
         
         if num_cam_bloque > 1:
             habs_por_cam = len(df_bloque) // num_cam_bloque
@@ -481,9 +505,7 @@ def procesar_archivo(archivo):
     with st.spinner("Procesando archivo..."):
         df = pd.read_csv(archivo)
         
-        # =========================================================================
-        # MODIFICADO: Asegurar que existen las columnas necesarias
-        # =========================================================================
+        # Asegurar que existen las columnas necesarias
         columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 
                                'sentimiento_nlp', 'is_checkout']
         for col in columnas_necesarias:
@@ -492,7 +514,6 @@ def procesar_archivo(archivo):
                     df[col] = 0  # Por defecto, asumir stay-over si no existe
                 else:
                     df[col] = None
-        # =========================================================================
         
         # Limpiar valores NaN en columnas numéricas
         for col in ['planta', 'habitacion_id', 'noches_estancia', 'num_huespedes', 'is_checkout']:
@@ -635,6 +656,88 @@ def procesar_archivo(archivo):
 
 def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
+    
+    # =========================================================================
+    # NUEVO: Animación de bienvenida (solo la primera vez)
+    # =========================================================================
+    if not st.session_state.bienvenida_mostrada:
+        # Mostrar animación de bienvenida
+        bienvenida_placeholder = st.empty()
+        
+        with bienvenida_placeholder.container():
+            st.markdown(
+                """
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 400px;
+                    animation: fadeIn 2s;
+                ">
+                    <h1 style="
+                        color: #1E88E5;
+                        font-size: 48px;
+                        text-align: center;
+                        margin-bottom: 20px;
+                        animation: slideIn 1.5s;
+                    ">
+                        🏨 Bienvenid@ al Sistema Inteligente<br>de Limpieza del Hotel Bali
+                    </h1>
+                    <div style="
+                        width: 100px;
+                        height: 100px;
+                        border: 5px solid #1E88E5;
+                        border-top: 5px solid transparent;
+                        border-radius: 50%;
+                        animation: spin 1.5s linear infinite;
+                        margin-top: 30px;
+                    "></div>
+                    <p style="
+                        color: #666;
+                        font-size: 20px;
+                        margin-top: 30px;
+                        animation: pulse 2s infinite;
+                    ">
+                        Cargando interfaz...
+                    </p>
+                </div>
+                
+                <style>
+                    @keyframes fadeIn {
+                        0% { opacity: 0; }
+                        100% { opacity: 1; }
+                    }
+                    @keyframes slideIn {
+                        0% { transform: translateY(-50px); opacity: 0; }
+                        100% { transform: translateY(0); opacity: 1; }
+                    }
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                    @keyframes pulse {
+                        0% { opacity: 0.6; }
+                        50% { opacity: 1; }
+                        100% { opacity: 0.6; }
+                    }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        # Esperar 3 segundos
+        time.sleep(3)
+        
+        # Limpiar la animación
+        bienvenida_placeholder.empty()
+        
+        # Marcar como mostrada
+        st.session_state.bienvenida_mostrada = True
+        
+        # Pequeña pausa para que se limpie bien
+        time.sleep(0.5)
+    # =========================================================================
     
     # Título principal (más pequeño y combinado)
     st.markdown(
@@ -943,7 +1046,8 @@ def mostrar_sidebar():
             for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
-                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats']:
+                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
+                        'bienvenida_mostrada']:  # <--- AÑADIDO
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1619,22 +1723,39 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                 if st.session_state.cluster_habitaciones:
                     df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # Ordenar por prioridad (cluster más alto primero = limpieza profunda)
-                if 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['late_checkout_pred', 'cluster', 'habitacion_id'], 
-                        ascending=[False, False, False]
-                    )
-                elif 'cluster' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['cluster', 'habitacion_id'], 
-                        ascending=[False, False]
-                    )
-                elif 'late_checkout_pred' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['late_checkout_pred', 'habitacion_id'], 
-                        ascending=[False, False]
-                    )
+                # =========================================================================
+                # MODIFICADO: Ordenar pendientes por prioridad: primero check-out
+                # =========================================================================
+                # Añadir columna auxiliar para ordenar (check-out primero = 0, stay-over = 1)
+                if 'is_checkout' in df_pendientes.columns:
+                    df_pendientes['prioridad_checkout'] = df_pendientes['is_checkout'].apply(lambda x: 0 if x == 1 else 1)
+                else:
+                    df_pendientes['prioridad_checkout'] = 1
+                
+                # Ordenar: primero prioridad_checkout, luego late_checkout_pred, luego cluster, luego habitacion_id
+                sort_columns = ['prioridad_checkout']
+                sort_ascending = [True]
+                
+                if 'late_checkout_pred' in df_pendientes.columns:
+                    sort_columns.append('late_checkout_pred')
+                    sort_ascending.append(False)
+                
+                if 'cluster' in df_pendientes.columns:
+                    sort_columns.append('cluster')
+                    sort_ascending.append(False)
+                
+                sort_columns.append('habitacion_id')
+                sort_ascending.append(True)
+                
+                df_pendientes = df_pendientes.sort_values(
+                    by=sort_columns,
+                    ascending=sort_ascending
+                )
+                
+                # Eliminar columna auxiliar
+                if 'prioridad_checkout' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.drop(columns=['prioridad_checkout'])
+                # =========================================================================
                 
                 st.markdown(f"### Pendientes ({pendientes} restantes)")
                 
