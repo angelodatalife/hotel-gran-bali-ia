@@ -13,7 +13,7 @@ from datetime import datetime
 import re
 import time
 import os
-import base64
+import base64  # <--- NUEVO: Para codificar la imagen
 from sklearn.preprocessing import LabelEncoder
 
 # =============================================================================
@@ -108,8 +108,8 @@ if 'df_planta_stats' not in st.session_state:
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
-if 'mostrar_pms' not in st.session_state:
-    st.session_state.mostrar_pms = False
+if 'mostrar_carga_pms' not in st.session_state:
+    st.session_state.mostrar_carga_pms = False
 # =============================================================================
 
 # =============================================================================
@@ -142,6 +142,19 @@ def formatear_tiempo(segundos):
     minutos = int(segundos // 60)
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
+
+# =============================================================================
+# NUEVO: Función para codificar la imagen a base64
+# =============================================================================
+def get_img_as_base64(file_path):
+    """Convierte una imagen a base64 para usarla en CSS"""
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except FileNotFoundError:
+        return None
+# =============================================================================
 
 # =============================================================================
 # MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
@@ -639,99 +652,158 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# NUEVO: Función para mostrar la pantalla de inicio con imagen de fondo
+# MODIFICADO: PANTALLA DE INICIO (con imagen de fondo clickeable)
 # =============================================================================
-def mostrar_pantalla_inicio_con_imagen():
-    """Muestra una pantalla de inicio con imagen de fondo clickeable"""
+def mostrar_pantalla_inicio():
+    """Muestra la pantalla de inicio con imagen de fondo clickeable"""
     
-    # Cargar la imagen y codificarla en base64
-    @st.cache_data
-    def get_img_as_base64(file):
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
+    # Codificar la imagen a base64
+    img_base64 = get_img_as_base64("background.png")
     
-    img = get_img_as_base64("background.png")
-    
-    # Estilo CSS para la imagen de fondo y el botón invisible
-    page_bg_img = f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{img}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    
-    /* Hacer que toda la pantalla sea clickeable */
-    .stApp::before {{
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        cursor: pointer;
-        z-index: 999;
-    }}
-    
-    /* Ocultar elementos de Streamlit que puedan interferir */
-    #root > div:nth-child(1) > div > div > div > div > section > div {{
-        background: transparent !important;
-    }}
-    
-    /* Ocultar el header de Streamlit */
-    header {{
-        display: none !important;
-    }}
-    
-    /* Mensaje flotante */
-    .click-message {{
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: white;
-        background-color: rgba(0, 0, 0, 0.6);
-        padding: 12px 24px;
-        border-radius: 50px;
-        font-size: 18px;
-        font-weight: bold;
-        z-index: 1000;
-        backdrop-filter: blur(5px);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        animation: pulse 2s infinite;
-    }}
-    
-    @keyframes pulse {{
-        0% {{ transform: translateX(-50%) scale(1); opacity: 1; }}
-        50% {{ transform: translateX(-50%) scale(1.05); opacity: 0.9; }}
-        100% {{ transform: translateX(-50%) scale(1); opacity: 1; }}
-    }}
-    </style>
-    """
-    
-    st.markdown(page_bg_img, unsafe_allow_html=True)
-    
-    # Mensaje flotante
-    st.markdown('<div class="click-message">👆 Haz clic en cualquier parte para continuar</div>', unsafe_allow_html=True)
-    
-    # Botón invisible que ocupa toda la pantalla
-    if st.button("", key="invisible_button", help="Haz clic para continuar"):
-        st.session_state.mostrar_pms = True
-        st.rerun()
+    if img_base64 is None:
+        # Si no hay imagen, mostrar la pantalla anterior como fallback
+        st.markdown(
+            """
+            <h2 style='text-align: center; color: #1E88E5; margin-top: 50px; margin-bottom: 30px;'>
+                🏨 Hotel Gran Bali - Sistema de Gestión IA de Limpieza
+            </h2>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown(
+                """
+                <h3 style='text-align: center; color: white; margin-bottom: 20px;'>
+                    Cargar PMS aquí ⬇️
+                </h3>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            archivo = st.file_uploader(
+                "Arrastra tu archivo CSV aquí",
+                type=['csv'],
+                key="file_uploader_inicio",
+                label_visibility="collapsed"
+            )
+            
+            if archivo is not None:
+                procesar_archivo(archivo)
+            
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            
+            st.markdown(
+                """
+                <h4 style='text-align: center; color: white; margin-bottom: 20px;'>
+                    🤖 Modelos cargados
+                </h4>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+            
+            with col_mod1:
+                if modelos.get('ann') is not None:
+                    st.markdown("✅ ANN")
+                else:
+                    st.markdown("❌ ANN")
+            
+            with col_mod2:
+                if modelos.get('xgboost') is not None:
+                    st.markdown("✅ XGBoost")
+                else:
+                    st.markdown("❌ XGBoost")
+            
+            with col_mod3:
+                if modelos.get('kmeans') is not None:
+                    st.markdown("✅ K-Means")
+                else:
+                    st.markdown("❌ K-Means")
+            
+            with col_mod4:
+                if modelos.get('nlp') is not None:
+                    st.markdown("✅ NLP")
+                else:
+                    st.markdown("❌ NLP")
+    else:
+        # Mostrar la imagen de fondo clickeable
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                background: none;
+            }}
+            .fullscreen-image {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background-image: url(data:image/png;base64,{img_base64});
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                cursor: pointer;
+                z-index: 999;
+            }}
+            .fullscreen-image:hover {{
+                opacity: 0.95;
+                transition: opacity 0.3s ease;
+            }}
+            .click-text {{
+                position: fixed;
+                bottom: 30px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: white;
+                font-size: 1.5rem;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                background: rgba(0,0,0,0.3);
+                padding: 10px 20px;
+                border-radius: 30px;
+                z-index: 1000;
+                pointer-events: none;
+                animation: pulse 2s infinite;
+            }}
+            @keyframes pulse {{
+                0% {{ opacity: 0.7; }}
+                50% {{ opacity: 1; }}
+                100% {{ opacity: 0.7; }}
+            }}
+            </style>
+            
+            <div class="fullscreen-image" onclick="document.querySelector('.stApp').dispatchEvent(new Event('click_image'))"></div>
+            <div class="click-text">👆 Haz clic en cualquier lugar para continuar</div>
+            
+            <script>
+            document.addEventListener('click_image', function() {{
+                // Enviar evento a Streamlit
+                window.parent.postMessage({{
+                    type: 'streamlit:setComponentValue',
+                    value: true
+                }}, '*');
+            }});
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Detectar clic en la imagen (usando un botón invisible)
+        if st.button("", key="imagen_click", help="Haz clic en la imagen para continuar"):
+            st.session_state.mostrar_carga_pms = True
+            st.rerun()
 # =============================================================================
 
 # =============================================================================
-# PANTALLA DE INICIO (antes de cargar archivo)
+# NUEVO: Pantalla de carga de PMS (después del clic en la imagen)
 # =============================================================================
-
-def mostrar_pantalla_inicio_original():
-    """Muestra la pantalla de inicio original con el cargador de PMS"""
+def mostrar_pantalla_carga_pms():
+    """Muestra la pantalla para cargar el archivo PMS"""
     
-    # Título principal (más pequeño y combinado)
+    # Título principal
     st.markdown(
         """
         <h2 style='text-align: center; color: #1E88E5; margin-top: 50px; margin-bottom: 30px;'>
@@ -745,7 +817,7 @@ def mostrar_pantalla_inicio_original():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Título "Cargar PMS" sin recuadro - AHORA EN BLANCO
+        # Título "Cargar PMS"
         st.markdown(
             """
             <h3 style='text-align: center; color: white; margin-bottom: 20px;'>
@@ -755,11 +827,11 @@ def mostrar_pantalla_inicio_original():
             unsafe_allow_html=True
         )
         
-        # File uploader de Streamlit (estilo drag and drop)
+        # File uploader de Streamlit
         archivo = st.file_uploader(
             "Arrastra tu archivo CSV aquí",
             type=['csv'],
-            key="file_uploader_inicio",
+            key="file_uploader_carga",
             label_visibility="collapsed"
         )
         
@@ -768,7 +840,7 @@ def mostrar_pantalla_inicio_original():
         
         st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # Sección de modelos cargados (centrada)
+        # Sección de modelos cargados
         st.markdown(
             """
             <h4 style='text-align: center; color: white; margin-bottom: 20px;'>
@@ -778,7 +850,7 @@ def mostrar_pantalla_inicio_original():
             unsafe_allow_html=True
         )
         
-        # Mostrar modelos en fila (centrados) CON MAYOR CONTRASTE
+        # Mostrar modelos en fila
         col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
         
         with col_mod1:
@@ -1040,7 +1112,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'mostrar_pms']:
+                        'mostrar_bienvenida', 'mostrar_carga_pms']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1053,17 +1125,17 @@ def mostrar_sidebar():
             st.rerun()
 
 # =============================================================================
-# LÓGICA PRINCIPAL DE NAVEGACIÓN
+# MODIFICADO: LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
-# Si no hay archivo cargado o estamos en la pantalla de inicio
+# Si no hay archivo cargado
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
-    # Si mostrar_pms es False, mostrar la imagen de fondo
-    if not st.session_state.mostrar_pms:
-        mostrar_pantalla_inicio_con_imagen()
+    # Si no se ha hecho clic en la imagen, mostrar la imagen de inicio
+    if not st.session_state.mostrar_carga_pms:
+        mostrar_pantalla_inicio()
     else:
-        # Mostrar la pantalla de inicio original con el cargador de PMS
-        mostrar_pantalla_inicio_original()
+        # Si ya se hizo clic, mostrar la pantalla de carga de PMS
+        mostrar_pantalla_carga_pms()
 else:
     # =========================================================================
     # NUEVO: Mostrar mensaje de bienvenida animado si está activado
