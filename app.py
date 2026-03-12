@@ -660,7 +660,7 @@ def mostrar_pantalla_inicio():
         st.markdown(
             """
             <h3 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
-                Cargar PMS aquí ⬇️
+                Cargar PMS ⬇️
             </h3>
             """,
             unsafe_allow_html=True
