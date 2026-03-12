@@ -13,7 +13,7 @@ from datetime import datetime
 import re
 import time
 import os
-import base64  # <--- NUEVO: Para codificar la imagen
+import base64
 from sklearn.preprocessing import LabelEncoder
 
 # =============================================================================
@@ -117,13 +117,15 @@ if 'mostrar_uploader' not in st.session_state:
 # =============================================================================
 
 # =============================================================================
-# NUEVO: Función para codificar la imagen de fondo
+# NUEVO: Función para cargar la imagen como base64
 # =============================================================================
 @st.cache_data
 def get_img_as_base64(file):
-    with open(file, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+    if os.path.exists(file):
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return None
 # =============================================================================
 
 def limpiar_texto_opinion(texto):
@@ -649,101 +651,126 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# NUEVA: Función para mostrar la pantalla de inicio con imagen de fondo
+# NUEVA: Pantalla de inicio con imagen de fondo
 # =============================================================================
 def mostrar_pantalla_imagen():
-    """Muestra la pantalla de inicio con la imagen de fondo y botón circular"""
+    """Muestra la pantalla de inicio con la imagen de fondo y un botón para avanzar"""
     
-    # Cargar la imagen y codificarla en base64
-    img_path = "background.png"
-    if os.path.exists(img_path):
-        img_base64 = get_img_as_base64(img_path)
+    # Cargar la imagen como base64
+    img_base64 = get_img_as_base64("background.png")
+    
+    if img_base64:
+        # Estilo para la imagen de fondo
+        page_bg_img = f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/png;base64,{img_base64}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
         
-        # Estilo para la imagen de fondo y el botón circular
+        /* Ocultar elementos de Streamlit que puedan molestar */
+        #MainMenu {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
+        header {{visibility: hidden;}}
+        
+        /* Estilo para el botón flotante */
+        .floating-btn {{
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            background-color: #FFD700;
+            color: #1E3A8A;
+            border: none;
+            border-radius: 50px;
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 1000;
+            transition: transform 0.3s, background-color 0.3s;
+            animation: pulse 2s infinite;
+        }}
+        
+        .floating-btn:hover {{
+            background-color: #FFA500;
+            transform: scale(1.1);
+        }}
+        
+        @keyframes pulse {{
+            0% {{
+                box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+            }}
+            70% {{
+                box-shadow: 0 0 0 15px rgba(255, 215, 0, 0);
+            }}
+            100% {{
+                box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
+            }}
+        }}
+        
+        /* Título superpuesto */
+        .title-overlay {{
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 900;
+        }}
+        
+        .title-overlay h1 {{
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }}
+        
+        .title-overlay p {{
+            font-size: 1.5rem;
+            opacity: 0.9;
+        }}
+        </style>
+        """
+        
+        st.markdown(page_bg_img, unsafe_allow_html=True)
+        
+        # Título superpuesto
         st.markdown(
-            f"""
-            <style>
-            .stApp {{
-                background-image: url("data:image/png;base64,{img_base64}");
-                background-size: cover;
-                background-position: center;
-                background-repeat: no-repeat;
-                background-attachment: fixed;
-            }}
-            
-            .circular-button {{
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                width: 60px;
-                height: 60px;
-                border-radius: 50%;
-                background-color: #FFD700;
-                color: #1E88E5;
-                font-size: 30px;
-                font-weight: bold;
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-                z-index: 9999;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: transform 0.3s, background-color 0.3s;
-            }}
-            
-            .circular-button:hover {{
-                transform: scale(1.1);
-                background-color: #FFC000;
-            }}
-            
-            .circular-button:active {{
-                transform: scale(0.95);
-            }}
-            
-            /* Ocultar elementos de Streamlit que puedan molestar */
-            #root > div:first-child > div:first-child > div:first-child > div:first-child {{
-                background: transparent;
-            }}
-            
-            header {{
-                background: transparent !important;
-            }}
-            
-            footer {{
-                display: none !important;
-            }}
-            </style>
-            
-            <div class="circular-button" onclick="document.querySelector('button[data-testid=\\'baseButton-header\\']').click()">
-                ▶
-            </div>
-            
-            <div style="display: none;">
-                <button data-testid="baseButton-header" onclick="alert('click')">Next</button>
+            """
+            <div class="title-overlay">
+                <h1>Hotel Gran Bali</h1>
+                <p>Sistema Inteligente de Gestión de Limpieza</p>
             </div>
             """,
             unsafe_allow_html=True
         )
         
-        # Botón oculto que se activa con el botón circular
-        if st.button("Siguiente", key="btn_siguiente", help="Ir a la pantalla de carga"):
-            st.session_state.mostrar_uploader = True
-            st.rerun()
+        # Botón flotante para avanzar
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col3:
+            if st.button("▶️ Continuar", key="btn_continuar", help="Haz clic para continuar"):
+                st.session_state.mostrar_uploader = True
+                st.rerun()
     else:
-        # Si no existe la imagen, mostrar mensaje y botón directo
-        st.warning("No se encontró la imagen background.png")
-        if st.button("Continuar a la carga de PMS"):
-            st.session_state.mostrar_uploader = True
-            st.rerun()
+        # Si no se encuentra la imagen, mostrar la pantalla de carga normal
+        st.session_state.mostrar_uploader = True
+        st.rerun()
 # =============================================================================
 
 # =============================================================================
 # PANTALLA DE CARGA DE ARCHIVOS (antes de cargar archivo)
 # =============================================================================
 
-def mostrar_pantalla_carga():
-    """Muestra la pantalla de carga de archivos"""
+def mostrar_pantalla_uploader():
+    """Muestra la pantalla para cargar el archivo PMS"""
     
     # Título principal (más pequeño y combinado)
     st.markdown(
@@ -946,6 +973,12 @@ def mostrar_pantalla_carga():
                     """,
                     unsafe_allow_html=True
                 )
+        
+        # Botón para volver a la pantalla de imagen (opcional)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("⬅️ Volver a la pantalla de inicio", key="btn_volver"):
+            st.session_state.mostrar_uploader = False
+            st.rerun()
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -1069,15 +1102,13 @@ def mostrar_sidebar():
 # LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
-# =========================================================================
-# NUEVO: Lógica para mostrar la imagen primero
-# =========================================================================
-if not st.session_state.archivo_cargado and not st.session_state.mostrar_uploader:
-    # Mostrar pantalla con imagen de fondo
-    mostrar_pantalla_imagen()
-elif not st.session_state.archivo_cargado or st.session_state.df_pms is None:
-    # Mostrar pantalla de carga de archivos
-    mostrar_pantalla_carga()
+# MODIFICADO: Lógica de navegación con la nueva pantalla de imagen
+if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
+    # Si no hay archivo cargado, mostrar la pantalla de imagen o la de uploader
+    if not st.session_state.mostrar_uploader:
+        mostrar_pantalla_imagen()
+    else:
+        mostrar_pantalla_uploader()
 else:
     # =========================================================================
     # NUEVO: Mostrar mensaje de bienvenida animado si está activado
