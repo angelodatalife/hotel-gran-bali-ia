@@ -694,7 +694,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <h2 style='text-align: center; color: white; margin-top: 5px; margin-bottom: 25px;'>
-            🏨 Check it Out! - Hotel Clean App
+            Check it Out! - Hotel Clean App
         </h2>
         """,
         unsafe_allow_html=True
