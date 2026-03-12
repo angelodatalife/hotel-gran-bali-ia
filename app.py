@@ -646,7 +646,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <h2 style='text-align: center; color: #1E88E5; margin-top: 50px; margin-bottom: 30px;'>
-            🏨 Check it Out - App
+            🏨 Check it Out! - App
         </h2>
         """,
         unsafe_allow_html=True
