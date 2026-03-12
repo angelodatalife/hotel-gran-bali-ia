@@ -742,7 +742,7 @@ def mostrar_pantalla_inicio():
         # Título "Cargar PMS" sin recuadro
         st.markdown(
             """
-            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 100px;'>
+            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 300px;'>
                 Cargar PMS ⬇️
             </h3>
             """,
