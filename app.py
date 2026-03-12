@@ -652,10 +652,10 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# MODIFICADO: PANTALLA DE INICIO (con imagen de fondo clickeable)
+# MODIFICADO: PANTALLA DE INICIO (con imagen de fondo y botón)
 # =============================================================================
 def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio con imagen de fondo clickeable"""
+    """Muestra la pantalla de inicio con imagen de fondo y botón"""
     
     # Codificar la imagen a base64
     img_base64 = get_img_as_base64("background.png")
@@ -729,15 +729,7 @@ def mostrar_pantalla_inicio():
                 else:
                     st.markdown("❌ NLP")
     else:
-        # Mostrar la imagen de fondo con un botón invisible superpuesto
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            # Botón grande y centrado para continuar
-            if st.button("👆 HAZ CLIC AQUÍ PARA COMENZAR", key="btn_continuar", use_container_width=True, type="primary"):
-                st.session_state.mostrar_carga_pms = True
-                st.rerun()
-        
-        # Mostrar la imagen como fondo
+        # Mostrar la imagen de fondo con un botón
         st.markdown(
             f"""
             <style>
@@ -754,35 +746,63 @@ def mostrar_pantalla_inicio():
                 background-size: cover;
                 background-position: center;
                 background-repeat: no-repeat;
-                z-index: -1;
-            }}
-            .content-overlay {{
-                position: relative;
                 z-index: 1;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                height: 80vh;
+            }}
+            .button-container {{
+                position: fixed;
+                bottom: 50px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 2;
+                text-align: center;
+                width: 100%;
+                pointer-events: none;
+            }}
+            .stButton > button {{
+                background-color: #FFD700;
+                color: #1E3A8A;
+                font-size: 1.8rem;
+                font-weight: bold;
+                padding: 20px 50px;
+                border-radius: 60px;
+                border: none;
+                box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+                transition: all 0.3s ease;
+                pointer-events: auto;
+                cursor: pointer;
+                border: 2px solid white;
+                animation: pulse 2s infinite;
+            }}
+            .stButton > button:hover {{
+                background-color: #FFC000;
+                transform: scale(1.1);
+                box-shadow: 0 12px 24px rgba(0,0,0,0.4);
+            }}
+            @keyframes pulse {{
+                0% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.05); }}
+                100% {{ transform: scale(1); }}
             }}
             </style>
             
             <div class="fullscreen-image"></div>
-            <div class="content-overlay">
-                <h1 style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); text-align: center; margin-bottom: 30px;">
-                    Hotel Gran Bali
-                </h1>
-                <p style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); text-align: center; font-size: 1.2rem;">
-                    Sistema de Gestión IA de Limpieza
-                </p>
+            <div class="button-container">
             </div>
             """,
             unsafe_allow_html=True
         )
+        
+        # Botón centrado en la parte inferior
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>", unsafe_allow_html=True)
+            if st.button("👉 Haz clic AQUÍ para comenzar 👈", key="btn_comenzar", use_container_width=True):
+                st.session_state.mostrar_carga_pms = True
+                st.rerun()
 # =============================================================================
 
 # =============================================================================
-# NUEVO: Pantalla de carga de PMS (después del clic en la imagen)
+# NUEVO: Pantalla de carga de PMS (después del clic en el botón)
 # =============================================================================
 def mostrar_pantalla_carga_pms():
     """Muestra la pantalla para cargar el archivo PMS"""
@@ -1114,7 +1134,7 @@ def mostrar_sidebar():
 
 # Si no hay archivo cargado
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
-    # Si no se ha hecho clic en la imagen, mostrar la imagen de inicio
+    # Si no se ha hecho clic en el botón, mostrar la imagen de inicio
     if not st.session_state.mostrar_carga_pms:
         mostrar_pantalla_inicio()
     else:
