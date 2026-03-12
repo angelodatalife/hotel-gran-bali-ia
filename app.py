@@ -103,12 +103,10 @@ if 'label_encoders' not in st.session_state:
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
 # =============================================================================
-# NUEVO: Variable para controlar la animación de bienvenida
+# NUEVO: Estado para controlar el mensaje de bienvenida
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
-if 'tiempo_bienvenida' not in st.session_state:
-    st.session_state.tiempo_bienvenida = None
 # =============================================================================
 
 # =============================================================================
@@ -171,9 +169,6 @@ def aplicar_kmeans(df):
         # Crear features por planta
         df_copy = df.copy()
         
-        # =========================================================================
-        # MODIFICADO: Añadir 'is_checkout' a las estadísticas por planta
-        # =========================================================================
         # Calcular estadísticas por planta
         agg_dict = {
             'tiempo_estimado_xgb': 'mean',
@@ -196,7 +191,6 @@ def aplicar_kmeans(df):
             column_names.insert(3, 'tasa_checkout')  # Insertar después de tasa_late_checkout
         
         planta_stats.columns = column_names
-        # =========================================================================
         
         # Añadir características adicionales
         planta_stats['sector_num'] = planta_stats['planta'].apply(
@@ -425,24 +419,24 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
         # =========================================================================
-        # MODIFICADO: Ordenar primero por is_checkout (check-out primero), 
-        # luego por prioridad (late checkout) y cluster, y finalmente por habitación
+        # MODIFICADO: Ordenar por prioridad (check-out primero, luego late checkout y cluster)
         # =========================================================================
+        # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
         if 'is_checkout' in df_bloque.columns:
-            # Orden: check-out (1) primero, luego stay-over (0)
+            df_bloque['prioridad_checkout'] = df_bloque['is_checkout']
+        else:
+            df_bloque['prioridad_checkout'] = 0
+        
+        # Ordenar: primero check-out, luego por late checkout, luego por cluster, luego por habitación
+        if 'cluster' in df_bloque.columns:
             df_bloque = df_bloque.sort_values(
-                by=['is_checkout', col_prioridad, 'cluster', 'habitacion_id'], 
+                by=['prioridad_checkout', col_prioridad, 'cluster', 'habitacion_id'], 
                 ascending=[False, False, False, True]
-            )
-        elif 'cluster' in df_bloque.columns:
-            df_bloque = df_bloque.sort_values(
-                by=[col_prioridad, 'cluster', 'habitacion_id'], 
-                ascending=[False, False, True]
             )
         else:
             df_bloque = df_bloque.sort_values(
-                by=[col_prioridad, 'habitacion_id'], 
-                ascending=[False, True]
+                by=['prioridad_checkout', col_prioridad, 'habitacion_id'], 
+                ascending=[False, False, True]
             )
         # =========================================================================
         
@@ -499,9 +493,7 @@ def procesar_archivo(archivo):
     with st.spinner("Procesando archivo..."):
         df = pd.read_csv(archivo)
         
-        # =========================================================================
-        # MODIFICADO: Asegurar que existen las columnas necesarias
-        # =========================================================================
+        # Asegurar que existen las columnas necesarias
         columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 
                                'sentimiento_nlp', 'is_checkout']
         for col in columnas_necesarias:
@@ -510,7 +502,6 @@ def procesar_archivo(archivo):
                     df[col] = 0  # Por defecto, asumir stay-over si no existe
                 else:
                     df[col] = None
-        # =========================================================================
         
         # Limpiar valores NaN en columnas numéricas
         for col in ['planta', 'habitacion_id', 'noches_estancia', 'num_huespedes', 'is_checkout']:
@@ -645,10 +636,9 @@ def procesar_archivo(archivo):
         st.session_state.selected_page = "📊 Gerente"
         
         # =========================================================================
-        # NUEVO: Activar animación de bienvenida
+        # NUEVO: Activar mensaje de bienvenida
         # =========================================================================
         st.session_state.mostrar_bienvenida = True
-        st.session_state.tiempo_bienvenida = time.time()
         # =========================================================================
         
         st.success(f"✅ PMS cargado: {len(df)} habitaciones")
@@ -970,7 +960,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'tiempo_bienvenida']:
+                        'mostrar_bienvenida']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -990,56 +980,63 @@ def mostrar_sidebar():
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
+    # =========================================================================
+    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
+    # =========================================================================
+    if st.session_state.mostrar_bienvenida:
+        # Crear un placeholder para el mensaje
+        welcome_placeholder = st.empty()
+        
+        # Mostrar mensaje con animación
+        with welcome_placeholder.container():
+            st.markdown(
+                """
+                <div style="
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 80vh;
+                    text-align: center;
+                    animation: fadeInOut 3s ease-in-out;
+                ">
+                    <div>
+                        <h1 style="color: #FFD700; font-size: 3.5rem; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
+                            🏨 ¡Bienvenid@ al Sistema Inteligente de Limpieza!
+                        </h1>
+                        <h2 style="color: white; font-size: 2.5rem; animation: pulse 2s infinite;">
+                            Hotel Gran Bali
+                        </h2>
+                    </div>
+                </div>
+                
+                <style>
+                    @keyframes fadeInOut {
+                        0% { opacity: 0; transform: scale(0.9); }
+                        20% { opacity: 1; transform: scale(1); }
+                        80% { opacity: 1; transform: scale(1); }
+                        100% { opacity: 0; transform: scale(0.9); }
+                    }
+                    
+                    @keyframes pulse {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                        100% { transform: scale(1); }
+                    }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        # Esperar 3 segundos y luego quitar el mensaje
+        time.sleep(3)
+        welcome_placeholder.empty()
+        st.session_state.mostrar_bienvenida = False
+        st.rerun()
+    # =========================================================================
+    
     # Mostrar sidebar y luego la vista correspondiente
     mostrar_sidebar()
     selected = st.session_state.selected_page
-    
-    # =========================================================================
-    # NUEVO: Mostrar animación de bienvenida si está activa
-    # =========================================================================
-    if st.session_state.mostrar_bienvenida:
-        tiempo_actual = time.time()
-        if st.session_state.tiempo_bienvenida and (tiempo_actual - st.session_state.tiempo_bienvenida) < 5:
-            # Crear una animación simple con emojis y texto
-            with st.container():
-                st.markdown(
-                    """
-                    <div style="
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background-color: rgba(0, 0, 0, 0.8);
-                        z-index: 9999;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        align-items: center;
-                        color: white;
-                        font-size: 36px;
-                        font-weight: bold;
-                        text-align: center;
-                        animation: fadeIn 1s;
-                    ">
-                        <div style="font-size: 80px; margin-bottom: 20px;">🏨✨</div>
-                        <div>¡Bienvenid@ al Sistema Inteligente</div>
-                        <div>de Limpieza del Hotel Gran Bali!</div>
-                        <div style="font-size: 24px; margin-top: 30px; color: #4CAF50;">Cargando datos...</div>
-                    </div>
-                    <style>
-                        @keyframes fadeIn {
-                            from { opacity: 0; }
-                            to { opacity: 1; }
-                        }
-                    </style>
-                    """,
-                    unsafe_allow_html=True
-                )
-        else:
-            st.session_state.mostrar_bienvenida = False
-            st.rerun()
-    # =========================================================================
 
 # =============================================================================
 # VISTA GERENTE - CON 3 PESTAÑAS INTERNAS
@@ -1066,19 +1063,8 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         else:
             checkouts = 0
         
-        # =========================================================================
-        # MODIFICADO: Contar is_checkout totales (suma de 0 y 1)
-        # =========================================================================
-        if 'is_checkout' in df.columns:
-            total_checkouts = int(df['is_checkout'].sum())
-            total_stayovers = len(df) - total_checkouts
-        else:
-            total_checkouts = 0
-            total_stayovers = len(df)
-        # =========================================================================
-        
         # Métricas principales en círculos
-        col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
+        col_metric1, col_metric2, col_metric3 = st.columns(3)
         
         with col_metric1:
             ocupacion = len(df) / TOTAL_HABITACIONES * 100
@@ -1142,29 +1128,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     background: transparent;
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{checkouts}</div>
-                    <div style="font-size: 16px;">Late Checkout</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        with col_metric4:
-            st.markdown(
-                f"""
-                <div style="
-                    width: 150px;
-                    height: 150px;
-                    border-radius: 50%;
-                    border: 4px solid #9C27B0;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    margin: 0 auto;
-                    background: transparent;
-                ">
-                    <div style="font-size: 32px; font-weight: bold;">{total_checkouts}</div>
-                    <div style="font-size: 16px;">Check-outs</div>
+                    <div style="font-size: 16px;">Check Out</div>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1211,7 +1175,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         st.title("🗺️ Estado de Habitaciones")
         
         # Leyenda de colores (movida arriba, sin título)
-        col_leg1, col_leg2, col_leg3, col_leg4, col_leg5, col_leg6 = st.columns(6)
+        col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
         
         with col_leg1:
             st.markdown(
@@ -1268,17 +1232,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 unsafe_allow_html=True
             )
         
-        with col_leg6:
-            st.markdown(
-                """
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 20px; background-color: #9C27B0; border-radius: 4px; margin-right: 8px;"></div>
-                    <span>Check-out</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
         st.markdown("---")
         
         # Definir sectores
@@ -1290,7 +1243,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         
         # Función para determinar el color de cada habitación
         def get_room_color(hab_id):
-            # Prioridad 1: Completadas
             if hab_id in st.session_state.habitaciones_completadas:
                 # Buscar si tuvo incidencia
                 for inc in st.session_state.incidencias:
@@ -1303,8 +1255,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     if mant['habitacion'] == hab_id:
                         return "#808080"  # Gris
                 return "#4CAF50"  # Verde (completada sin problemas)
-            
-            # Prioridad 2: Stand By
             elif hab_id in st.session_state.habitaciones_standby:
                 # Buscar el tipo de problema para el color correcto
                 for inc in st.session_state.incidencias:
@@ -1314,14 +1264,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                         elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
                             return "#FF4444"  # Rojo
                 return "#FFA500"  # Naranja por defecto para standby
-            
-            # Prioridad 3: Check-out (si está disponible)
-            else:
-                row = df[df['habitacion_id'] == hab_id]
-                if len(row) > 0 and 'is_checkout' in row.columns and row.iloc[0]['is_checkout'] == 1:
-                    return "#9C27B0"  # Morado para check-out
-            
-            return "transparent"  # Sin color (pendiente normal)
+            return "transparent"  # Sin color (pendiente)
         
         # Crear pestañas por sector
         subtab1, subtab2, subtab3 = st.tabs(["🔵 Sector Bajo", "🟡 Sector Medio", "🔴 Sector Alto"])
@@ -1409,11 +1352,9 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                         # Verificar si la camarera trabaja en este sector
                         if any(p in plantas for p in df_cam['planta'].unique()):
                             num_hab = len(df_cam)
-                            num_checkouts = df_cam['is_checkout'].sum() if 'is_checkout' in df_cam.columns else 0
                             datos_sector.append({
                                 'Camarera': cam,
-                                'Habitaciones': num_hab,
-                                'Check-outs': int(num_checkouts)
+                                'Habitaciones': num_hab
                             })
                 
                 if datos_sector:
@@ -1431,9 +1372,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                             y=[row['Habitaciones']],
                             name=row['Camarera'],
                             marker_color=color,
-                            showlegend=False,
-                            text=f"Check-outs: {row['Check-outs']}",
-                            textposition='outside'
+                            showlegend=False
                         ))
                     
                     fig.add_hline(
@@ -1458,7 +1397,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     if len(sobrecargadas) > 0:
                         st.warning(f"⚠️ Camareras con sobrecarga en {sector_nombre}:")
                         for _, row in sobrecargadas.iterrows():
-                            st.markdown(f"- {row['Camarera']}: {row['Habitaciones']} habitaciones ({row['Check-outs']} check-outs)")
+                            st.markdown(f"- {row['Camarera']}: {row['Habitaciones']} habitaciones")
                 else:
                     st.info(f"No hay camareras asignadas al sector {sector_nombre}")
                 
@@ -1751,15 +1690,15 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                 if st.session_state.cluster_habitaciones:
                     df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # Ordenar por prioridad (check-out primero, luego cluster, luego habitación)
+                # Ordenar por prioridad (primero check-out, luego cluster, luego late checkout)
                 if 'is_checkout' in df_pendientes.columns:
                     df_pendientes = df_pendientes.sort_values(
-                        by=['is_checkout', 'cluster', 'habitacion_id'], 
-                        ascending=[False, False, True]
+                        by=['is_checkout', 'cluster', 'late_checkout_pred', 'habitacion_id'], 
+                        ascending=[False, False, False, True]
                     )
                 elif 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
                     df_pendientes = df_pendientes.sort_values(
-                        by=['late_checkout_pred', 'cluster', 'habitacion_id'], 
+                        by=['cluster', 'late_checkout_pred', 'habitacion_id'], 
                         ascending=[False, False, False]
                     )
                 elif 'cluster' in df_pendientes.columns:
@@ -2040,7 +1979,7 @@ elif st.session_state.archivo_cargado and selected == "📋 Dataset":
         df['cluster_kmeans'] = df['habitacion_id'].map(st.session_state.cluster_habitaciones)
     
     st.subheader("📊 Métricas del dataset")
-    col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
+    col_met1, col_met2, col_met3, col_met4 = st.columns(4)
     with col_met1:
         st.metric("Registros", len(df))
     with col_met2:
@@ -2049,9 +1988,6 @@ elif st.session_state.archivo_cargado and selected == "📋 Dataset":
         st.metric("Incidencias", len(st.session_state.incidencias))
     with col_met4:
         st.metric("Mantenimiento", len(st.session_state.mantenimiento))
-    with col_met5:
-        if 'is_checkout' in df.columns:
-            st.metric("Check-outs", int(df['is_checkout'].sum()))
     
     st.subheader("📋 Datos completos")
     st.dataframe(df, use_container_width=True, height=500)
