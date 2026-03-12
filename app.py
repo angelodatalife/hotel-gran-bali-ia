@@ -680,35 +680,61 @@ def mostrar_pantalla_inicio():
             color: white !important;
         }}
         
-        /* Centrar verticalmente el contenido */
-        .main {{
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }}
-        
         /* Mantener los botones y elementos interactivos con su estilo */
         .stButton button, .stFileUploader {{
             background-color: rgba(255, 255, 255, 0.9) !important;
             color: black !important;
+        }}
+        
+        /* Estructura de página para centrar título y poner carga abajo */
+        .main {{
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }}
+        
+        .title-container {{
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        
+        .upload-container {{
+            position: fixed;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            margin: auto;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
         }}
         </style>
         """
         st.markdown(page_bg_img, unsafe_allow_html=True)
     # =========================================================================
     
-    # Título principal (más pequeño y combinado)
+    # Título principal en el centro
     st.markdown(
         """
-        <h2 style='text-align: center; color: white; margin-top: 0; margin-bottom: 25px;'>
-            Check it Out! - Hotel Clean App
-        </h2>
+        <div class="title-container">
+            <h2 style='text-align: center; color: white; margin: 0;'>
+                Check it Out! - Hotel Clean App
+            </h2>
+        </div>
         """,
         unsafe_allow_html=True
     )
     
-    # Contenedor central para la carga de archivos
+    # Contenedor inferior para la carga de archivos
+    st.markdown(
+        """
+        <div class="upload-container">
+        """,
+        unsafe_allow_html=True
+    )
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
@@ -732,6 +758,8 @@ def mostrar_pantalla_inicio():
         
         if archivo is not None:
             procesar_archivo(archivo)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
