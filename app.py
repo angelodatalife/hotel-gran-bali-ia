@@ -683,7 +683,7 @@ def mostrar_pantalla_inicio():
         st.markdown(
             """
             <h4 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
-                🤖 Modelos cargados
+                🤖 Modelos Inteligentes cargados
             </h4>
             """,
             unsafe_allow_html=True
