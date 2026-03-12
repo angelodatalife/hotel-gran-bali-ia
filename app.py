@@ -652,10 +652,10 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# MODIFICADO: PANTALLA DE INICIO (con imagen de fondo y flecha clickeable)
+# MODIFICADO: PANTALLA DE INICIO (con imagen de fondo y botón de flecha)
 # =============================================================================
 def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio con imagen de fondo y flecha clickeable"""
+    """Muestra la pantalla de inicio con imagen de fondo y botón de flecha"""
     
     # Codificar la imagen a base64
     img_base64 = get_img_as_base64("background.png")
@@ -729,72 +729,86 @@ def mostrar_pantalla_inicio():
                 else:
                     st.markdown("❌ NLP")
     else:
-        # Mostrar la imagen de fondo con flecha clickeable
-        col1, col2, col3 = st.columns([1, 10, 1])
+        # Mostrar la imagen de fondo con botón de flecha
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                background: none;
+            }}
+            .fullscreen-image {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background-image: url(data:image/png;base64,{img_base64});
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                z-index: 999;
+            }}
+            .arrow-button {{
+                position: fixed;
+                bottom: 30px;
+                right: 30px;
+                width: 70px;
+                height: 70px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.2);
+                backdrop-filter: blur(10px);
+                border: 2px solid white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                z-index: 1000;
+                transition: all 0.3s ease;
+                color: white;
+                font-size: 2.5rem;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            }}
+            .arrow-button:hover {{
+                background: rgba(255, 255, 255, 0.4);
+                transform: scale(1.1);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+            }}
+            .arrow-button:active {{
+                transform: scale(0.95);
+            }}
+            .hotel-title {{
+                position: fixed;
+                top: 30px;
+                left: 30px;
+                color: white;
+                font-size: 2rem;
+                font-weight: bold;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                z-index: 1000;
+                background: rgba(0,0,0,0.3);
+                padding: 10px 20px;
+                border-radius: 10px;
+                backdrop-filter: blur(5px);
+            }}
+            </style>
+            
+            <div class="fullscreen-image"></div>
+            <div class="hotel-title">🏨 Hotel Gran Bali</div>
+            """,
+            unsafe_allow_html=True
+        )
         
-        with col2:
-            # Botón con flecha grande en la esquina inferior izquierda
-            if st.button("➡️", key="flecha_inicio", help="Haz clic para continuar"):
+        # Crear columnas para posicionar el botón
+        col1, col2, col3 = st.columns([5, 1, 1])
+        with col3:
+            # Botón de flecha
+            if st.button("➡️", key="arrow_btn", help="Comenzar"):
                 st.session_state.mostrar_carga_pms = True
                 st.rerun()
-            
-            # Estilo para posicionar la flecha sobre la imagen
-            st.markdown(
-                f"""
-                <style>
-                .stApp {{
-                    background: none;
-                }}
-                .stButton > button {{
-                    position: fixed;
-                    bottom: 30px;
-                    left: 30px;
-                    z-index: 1000;
-                    font-size: 3rem;
-                    width: 80px;
-                    height: 80px;
-                    border-radius: 50%;
-                    background-color: rgba(255, 255, 255, 0.3);
-                    color: white;
-                    border: 2px solid white;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-                    backdrop-filter: blur(5px);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 0;
-                    line-height: 1;
-                }}
-                .stButton > button:hover {{
-                    background-color: rgba(255, 255, 255, 0.6);
-                    color: #333;
-                    transform: scale(1.1);
-                    border-color: #FFD700;
-                }}
-                .fullscreen-image {{
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100vw;
-                    height: 100vh;
-                    background-image: url(data:image/png;base64,{img_base64});
-                    background-size: cover;
-                    background-position: center;
-                    background-repeat: no-repeat;
-                    z-index: 1;
-                }}
-                </style>
-                
-                <div class="fullscreen-image"></div>
-                """,
-                unsafe_allow_html=True
-            )
 # =============================================================================
 
 # =============================================================================
-# NUEVO: Pantalla de carga de PMS (después del clic en la flecha)
+# NUEVO: Pantalla de carga de PMS (después del clic en el botón)
 # =============================================================================
 def mostrar_pantalla_carga_pms():
     """Muestra la pantalla para cargar el archivo PMS"""
@@ -1000,6 +1014,11 @@ def mostrar_pantalla_carga_pms():
                     """,
                     unsafe_allow_html=True
                 )
+        
+        # Botón para volver a la pantalla de inicio
+        if st.button("⬅️ Volver al inicio", use_container_width=True):
+            st.session_state.mostrar_carga_pms = False
+            st.rerun()
 # =============================================================================
 
 # =============================================================================
@@ -1126,7 +1145,7 @@ def mostrar_sidebar():
 
 # Si no hay archivo cargado
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
-    # Si no se ha hecho clic en la flecha, mostrar la imagen de inicio
+    # Si no se ha hecho clic en el botón, mostrar la imagen de inicio con botón
     if not st.session_state.mostrar_carga_pms:
         mostrar_pantalla_inicio()
     else:
