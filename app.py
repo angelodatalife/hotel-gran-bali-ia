@@ -13,7 +13,7 @@ from datetime import datetime
 import re
 import time
 import os
-import base64  # Para codificar la imagen
+import base64  # <--- NUEVO: Para codificar la imagen
 from sklearn.preprocessing import LabelEncoder
 
 # =============================================================================
@@ -144,7 +144,7 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 # =============================================================================
-# Función para codificar la imagen a base64
+# NUEVO: Función para codificar la imagen a base64
 # =============================================================================
 def get_img_as_base64(file_path):
     """Convierte una imagen a base64 para usarla en CSS"""
@@ -157,7 +157,7 @@ def get_img_as_base64(file_path):
 # =============================================================================
 
 # =============================================================================
-# aplicar_kmeans ahora trabaja a nivel de habitación
+# MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
 # =============================================================================
 def aplicar_kmeans(df):
     """Aplica K-Means para segmentar habitaciones por perfil de limpieza (a nivel de habitación)"""
@@ -241,6 +241,7 @@ def aplicar_kmeans(df):
     except Exception as e:
         # Silenciosamente fallar sin mostrar warning
         return {}
+# =============================================================================
 
 def predecir_late_checkout_xgboost(df):
     """Usa XGBoost para predecir late checkout"""
@@ -424,7 +425,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
         # =========================================================================
-        # Ordenar por prioridad (check-out primero, luego late checkout y cluster)
+        # MODIFICADO: Ordenar por prioridad (check-out primero, luego late checkout y cluster)
         # =========================================================================
         # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
         if 'is_checkout' in df_bloque.columns:
@@ -641,7 +642,7 @@ def procesar_archivo(archivo):
         st.session_state.selected_page = "📊 Gerente"
         
         # =========================================================================
-        # Activar mensaje de bienvenida
+        # NUEVO: Activar mensaje de bienvenida
         # =========================================================================
         st.session_state.mostrar_bienvenida = True
         # =========================================================================
@@ -651,10 +652,10 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# PANTALLA DE INICIO (con imagen de fondo y botón circular)
+# MODIFICADO: PANTALLA DE INICIO (con imagen de fondo y botón de flecha)
 # =============================================================================
 def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio con imagen de fondo y botón circular"""
+    """Muestra la pantalla de inicio con imagen de fondo y botón de flecha"""
     
     # Codificar la imagen a base64
     img_base64 = get_img_as_base64("background.png")
@@ -728,7 +729,16 @@ def mostrar_pantalla_inicio():
                 else:
                     st.markdown("❌ NLP")
     else:
-        # Mostrar la imagen de fondo con botón circular
+        # Configurar columnas para el botón
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col3:
+            # Botón con flecha en la esquina superior derecha
+            if st.button("➡️ Continuar", key="btn_continuar", use_container_width=False, type="primary"):
+                st.session_state.mostrar_carga_pms = True
+                st.rerun()
+        
+        # Mostrar la imagen de fondo
         st.markdown(
             f"""
             <style>
@@ -745,87 +755,44 @@ def mostrar_pantalla_inicio():
                 background-size: cover;
                 background-position: center;
                 background-repeat: no-repeat;
-                z-index: 1;
+                z-index: -1;
             }}
-            .button-container {{
+            .welcome-text {{
                 position: fixed;
-                bottom: 50px;
-                right: 50px;
-                z-index: 1000;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }}
-            .circular-button {{
-                width: 80px;
-                height: 80px;
-                border-radius: 50%;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border: none;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: transform 0.3s ease, box-shadow 0.3s ease;
-                animation: pulse 2s infinite;
-            }}
-            .circular-button:hover {{
-                transform: scale(1.1);
-                box-shadow: 0 15px 40px rgba(0,0,0,0.4);
-            }}
-            .circular-button:active {{
-                transform: scale(0.95);
-            }}
-            .arrow-icon {{
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                text-align: center;
                 color: white;
-                font-size: 40px;
-                font-weight: bold;
-                line-height: 1;
-            }}
-            .button-text {{
-                color: white;
-                margin-top: 10px;
-                font-size: 16px;
-                font-weight: 500;
                 text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-                background: rgba(0,0,0,0.3);
-                padding: 5px 15px;
-                border-radius: 20px;
+                z-index: 1;
+                width: 100%;
+                padding: 20px;
             }}
-            @keyframes pulse {{
-                0% {{
-                    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
-                }}
-                70% {{
-                    box-shadow: 0 0 0 20px rgba(102, 126, 234, 0);
-                }}
-                100% {{
-                    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0);
-                }}
+            .welcome-title {{
+                font-size: 3.5rem;
+                font-weight: bold;
+                margin-bottom: 20px;
+                color: #FFD700;
+            }}
+            .welcome-subtitle {{
+                font-size: 2rem;
+                color: white;
             }}
             </style>
             
             <div class="fullscreen-image"></div>
-            
-            <div class="button-container">
-                <button class="circular-button" onclick="document.querySelector('button[kind=\\'secondary\\']').click()">
-                    <span class="arrow-icon">→</span>
-                </button>
-                <div class="button-text">Continuar</div>
+            <div class="welcome-text">
+                <div class="welcome-title">🏨 Hotel Gran Bali</div>
+                <div class="welcome-subtitle">Sistema de Gestión IA de Limpieza</div>
             </div>
             """,
             unsafe_allow_html=True
         )
-        
-        # Botón invisible de Streamlit que se activa al hacer clic en el botón circular
-        if st.button("", key="btn_continuar", help="Haz clic para continuar"):
-            st.session_state.mostrar_carga_pms = True
-            st.rerun()
 # =============================================================================
 
 # =============================================================================
-# Pantalla de carga de PMS (después del clic en el botón)
+# NUEVO: Pantalla de carga de PMS (después del clic en el botón)
 # =============================================================================
 def mostrar_pantalla_carga_pms():
     """Muestra la pantalla para cargar el archivo PMS"""
@@ -1031,6 +998,7 @@ def mostrar_pantalla_carga_pms():
                     """,
                     unsafe_allow_html=True
                 )
+# =============================================================================
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -1151,7 +1119,7 @@ def mostrar_sidebar():
             st.rerun()
 
 # =============================================================================
-# LÓGICA PRINCIPAL DE NAVEGACIÓN
+# MODIFICADO: LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
 # Si no hay archivo cargado
@@ -1164,7 +1132,7 @@ if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
         mostrar_pantalla_carga_pms()
 else:
     # =========================================================================
-    # Mostrar mensaje de bienvenida animado si está activado
+    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
     # =========================================================================
     if st.session_state.mostrar_bienvenida:
         # Crear un placeholder para el mensaje
@@ -1601,7 +1569,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 df_clusters['cluster'] = df_clusters['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
                 # =========================================================================
-                # Estadísticas de clusters basadas en datos reales, no en promedios de planta
+                # MODIFICADO: Estadísticas de clusters basadas en datos reales, no en promedios de planta
                 # =========================================================================
                 # Calcular estadísticas reales por cluster
                 cluster_stats_real = df_clusters.groupby('cluster').agg({
@@ -1737,7 +1705,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
                             cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
                             # =========================================================================
-                            # Descripción de perfil basada en cluster (ahora por habitación)
+                            # MODIFICADO: Descripción de perfil basada en cluster (ahora por habitación)
                             # =========================================================================
                             if cluster == 0:
                                 st.markdown("**Perfil:** ⚡ Rápido")
