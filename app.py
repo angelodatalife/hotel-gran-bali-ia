@@ -912,7 +912,7 @@ else:
                             🏨 ¡Bienvenid@ al Sistema Inteligente de Limpieza!
                         </h1>
                         <h2 style="color: white; font-size: 2.5rem; animation: pulse 2s infinite;">
-                            Hotel Gran Bali
+                            Cargando modelos inteligentes...
                         </h2>
                     </div>
                 </div>
