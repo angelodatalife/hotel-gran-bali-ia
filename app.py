@@ -140,8 +140,11 @@ def formatear_tiempo(segundos):
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
+# =============================================================================
+# MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
+# =============================================================================
 def aplicar_kmeans(df):
-    """Aplica K-Means para segmentar habitaciones por perfil de limpieza"""
+    """Aplica K-Means para segmentar habitaciones por perfil de limpieza (a nivel de habitación)"""
     # Verificar si el modelo K-Means existe y es accesible
     if modelos.get('kmeans') is None or df is None or len(df) == 0:
         return {}
@@ -162,80 +165,67 @@ def aplicar_kmeans(df):
         if kmeans_model is None or scaler is None:
             return {}
         
-        # Guardar estadísticas de plantas para uso posterior
-        if 'df_planta_stats' in kmeans_artifacts:
-            st.session_state.df_planta_stats = kmeans_artifacts['df_planta_stats']
+        # Guardar cluster_dict si existe en los artefactos (para estadísticas)
+        if 'cluster_dict' in kmeans_artifacts:
+            # Usar el diccionario pre-calculado si existe (más rápido)
+            return kmeans_artifacts['cluster_dict']
         
-        # Crear features por planta
+        # Si no hay diccionario pre-calculado, predecir para cada habitación
         df_copy = df.copy()
         
-        # Calcular estadísticas por planta
-        agg_dict = {
-            'tiempo_estimado_xgb': 'mean',
-            'late_checkout': 'mean',
-            'noches_estancia': 'mean',
-            'num_huespedes': 'mean',
-            'tiene_ninos': 'mean'
-        }
+        # Preparar features para cada habitación
+        # Mapeo de sector a número
+        sector_mapping = {'bajo': 0, 'medio': 1, 'alto': 2}
+        df_copy['sector_num'] = df_copy['sector'].map(sector_mapping).fillna(0)
         
-        # Añadir is_checkout si existe en el dataframe
-        if 'is_checkout' in df_copy.columns:
-            agg_dict['is_checkout'] = 'mean'
-        
-        planta_stats = df_copy.groupby('planta').agg(agg_dict).reset_index()
-        
-        # Renombrar columnas
-        column_names = ['planta', 'tiempo_promedio', 'tasa_late_checkout', 
-                        'noches_promedio', 'huespedes_promedio', 'tasa_ninos']
-        if 'is_checkout' in agg_dict:
-            column_names.insert(3, 'tasa_checkout')  # Insertar después de tasa_late_checkout
-        
-        planta_stats.columns = column_names
-        
-        # Añadir características adicionales
-        planta_stats['sector_num'] = planta_stats['planta'].apply(
-            lambda x: 0 if x <= 15 else (1 if x <= 30 else 2)
-        )
-        planta_stats['num_habitaciones'] = planta_stats['planta'].apply(
-            lambda x: 18 if x <= 15 else (10 if x <= 30 else (3 if x <= 42 else 2))
-        )
-        
-        # Seleccionar features para clustering (usando las que tiene el modelo)
+        # Seleccionar las features necesarias (las mismas que se usaron en entrenamiento)
         feature_cols = features_kmeans if features_kmeans else [
-            'planta', 'tiempo_promedio', 'tasa_late_checkout',
-            'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
-            'sector_num', 'num_habitaciones'
+            'planta', 'tiempo_estimado_xgb', 'late_checkout', 'is_checkout',
+            'noches_estancia', 'num_huespedes', 'tiene_ninos', 'sector_num'
         ]
         
-        # Verificar que todas las columnas existen
-        available_cols = [col for col in feature_cols if col in planta_stats.columns]
-        if len(available_cols) < 2:
+        # Verificar qué columnas están disponibles
+        available_cols = []
+        for col in feature_cols:
+            if col in df_copy.columns:
+                available_cols.append(col)
+            elif col == 'tiempo_estimado_xgb' and 'tiempo_estimado' in df_copy.columns:
+                # Usar tiempo_estimado si tiempo_estimado_xgb no existe
+                df_copy['tiempo_estimado_xgb'] = df_copy['tiempo_estimado']
+                available_cols.append('tiempo_estimado_xgb')
+            elif col == 'is_checkout' and 'is_checkout' not in df_copy.columns:
+                # Si no hay is_checkout, asumir 0
+                df_copy['is_checkout'] = 0
+                available_cols.append('is_checkout')
+            elif col in ['late_checkout', 'noches_estancia', 'num_huespedes', 'tiene_ninos']:
+                # Estas columnas deberían existir, si no, crear con 0
+                if col not in df_copy.columns:
+                    df_copy[col] = 0
+                available_cols.append(col)
+        
+        if len(available_cols) < len(feature_cols) * 0.5:  # Si menos de la mitad de features disponibles
             return {}
         
-        X = planta_stats[available_cols].values
+        # Crear matriz de features
+        X = df_copy[available_cols].values
         
         # Escalar features
         X_scaled = scaler.transform(X)
         
-        # Predecir clusters por planta
-        clusters_planta = kmeans_model.predict(X_scaled)
+        # Predecir clusters para cada habitación
+        clusters = kmeans_model.predict(X_scaled)
         
-        # Mapear cada planta a su cluster
-        planta_cluster_map = {}
-        for i, row in planta_stats.iterrows():
-            planta_cluster_map[int(row['planta'])] = int(clusters_planta[i])
-        
-        # Asignar cluster a cada habitación según su planta
+        # Crear diccionario habitación -> cluster
         cluster_dict = {}
-        for _, row in df_copy.iterrows():
+        for i, row in df_copy.iterrows():
             hab_id = row['habitacion_id']
-            planta = int(row['planta'])
-            cluster_dict[hab_id] = planta_cluster_map.get(planta, 0)
+            cluster_dict[hab_id] = int(clusters[i])
         
         return cluster_dict
     except Exception as e:
         # Silenciosamente fallar sin mostrar warning
         return {}
+# =============================================================================
 
 def predecir_late_checkout_xgboost(df):
     """Usa XGBoost para predecir late checkout"""
@@ -319,7 +309,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     # Aplicar XGBoost para mejorar predicción de late checkout
     df_asignar = predecir_late_checkout_xgboost(df_asignar)
     
-    # Aplicar K-Means para obtener clusters
+    # Aplicar K-Means para obtener clusters (ahora por habitación)
     cluster_dict = aplicar_kmeans(df_asignar)
     st.session_state.cluster_habitaciones = cluster_dict
     if cluster_dict:
@@ -1417,42 +1407,50 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 df_clusters = df.copy()
                 df_clusters['cluster'] = df_clusters['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # Explicación de perfiles
+                # =========================================================================
+                # MODIFICADO: Estadísticas de clusters basadas en datos reales, no en promedios de planta
+                # =========================================================================
+                # Calcular estadísticas reales por cluster
+                cluster_stats_real = df_clusters.groupby('cluster').agg({
+                    'tiempo_estimado_xgb': ['mean', 'min', 'max', 'count'],
+                    'is_checkout': 'mean',
+                    'late_checkout': 'mean',
+                    'planta': ['min', 'max']
+                }).round(2)
+                
+                # Aplanar columnas para mejor visualización
+                cluster_stats_real.columns = ['_'.join(col).strip() for col in cluster_stats_real.columns.values]
+                cluster_stats_real = cluster_stats_real.reset_index()
+                
+                # Mostrar estadísticas
+                st.dataframe(cluster_stats_real, use_container_width=True)
+                
+                # Explicación de perfiles (ahora basada en datos reales)
                 st.caption("""
-                **Perfiles de limpieza (K-Means):**
-                - **Cluster 0**: Plantas 16-30 (Tiempo medio: ~29 min)
-                - **Cluster 1**: Plantas 37-52 (Tiempo medio: ~40 min)
-                - **Cluster 2**: Plantas 2-15 (Tiempo medio: ~28 min)
-                - **Cluster 3**: Plantas 17-29 (Tiempo medio: ~29 min)
-                - **Cluster 4**: Plantas 31-48 (Tiempo medio: ~40 min)
-                - **Cluster 5**: Plantas 32-49 (Tiempo medio: ~40 min)
+                **Perfiles de limpieza (K-Means por habitación):**
+                Los clusters se calculan individualmente por habitación, no por planta.
+                Cada habitación tiene su propio perfil basado en:
+                - Tiempo estimado de limpieza
+                - Si es check-out o stay-over
+                - Probabilidad de late checkout
+                - Número de huéspedes, niños, etc.
                 """)
                 
-                # Mostrar distribución por sector si hay datos de planta_stats
-                if st.session_state.df_planta_stats:
-                    try:
-                        # Convertir dict a DataFrame si es necesario
-                        if isinstance(st.session_state.df_planta_stats, dict):
-                            df_stats = pd.DataFrame(st.session_state.df_planta_stats)
-                        else:
-                            df_stats = st.session_state.df_planta_stats
-                        
-                        if isinstance(df_stats, pd.DataFrame) and 'cluster' in df_stats.columns:
-                            for sector_nombre, plantas in sectores_carga.items():
-                                df_sector_stats = df_stats[df_stats['planta'].isin(plantas)]
-                                if len(df_sector_stats) > 0:
-                                    cluster_counts = df_sector_stats['cluster'].value_counts().sort_index()
-                                    
-                                    # Crear gráfico de distribución
-                                    fig = px.pie(
-                                        values=cluster_counts.values,
-                                        names=[f"Cluster {i}" for i in cluster_counts.index],
-                                        title=f"Distribución de clusters - {sector_nombre}",
-                                        color_discrete_sequence=px.colors.qualitative.Set3
-                                    )
-                                    st.plotly_chart(fig, use_container_width=True)
-                    except:
-                        pass
+                # Mostrar distribución por sector (opcional)
+                if st.checkbox("Mostrar distribución de clusters por sector"):
+                    for sector_nombre, plantas in sectores_carga.items():
+                        df_sector_clusters = df_clusters[df_clusters['planta'].isin(plantas)]
+                        if len(df_sector_clusters) > 0:
+                            cluster_counts = df_sector_clusters['cluster'].value_counts().sort_index()
+                            
+                            fig = px.pie(
+                                values=cluster_counts.values,
+                                names=[f"Cluster {i}" for i in cluster_counts.index],
+                                title=f"Distribución de clusters - {sector_nombre}",
+                                color_discrete_sequence=px.colors.qualitative.Set3
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                # =========================================================================
         else:
             st.info("No hay datos de asignación disponibles")
 
@@ -1545,18 +1543,24 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         # Mostrar perfil si está disponible
                         if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
                             cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
+                            # =========================================================================
+                            # MODIFICADO: Descripción de perfil basada en cluster (ahora por habitación)
+                            # =========================================================================
                             if cluster == 0:
-                                st.markdown("**Perfil:** ⚡ Rápido (planta 16-30)")
+                                st.markdown("**Perfil:** ⚡ Rápido")
                             elif cluster == 1:
-                                st.markdown("**Perfil:** 🔬 Profundo (planta 37-52)")
+                                st.markdown("**Perfil:** 🔬 Muy profundo")
                             elif cluster == 2:
-                                st.markdown("**Perfil:** ⚡ Rápido (planta 2-15)")
+                                st.markdown("**Perfil:** ⚡ Rápido")
                             elif cluster == 3:
-                                st.markdown("**Perfil:** 📊 Estándar (planta 17-29)")
+                                st.markdown("**Perfil:** 📊 Estándar")
                             elif cluster == 4:
-                                st.markdown("**Perfil:** 🔬 Profundo (planta 31-48)")
+                                st.markdown("**Perfil:** 🔬 Profundo")
                             elif cluster == 5:
-                                st.markdown("**Perfil:** 🔬 Profundo (planta 32-49)")
+                                st.markdown("**Perfil:** 🔬 Profundo")
+                            else:
+                                st.markdown(f"**Perfil:** Cluster {cluster}")
+                            # =========================================================================
                     
                     with col_crono2:
                         tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
