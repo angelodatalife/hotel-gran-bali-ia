@@ -103,10 +103,10 @@ if 'label_encoders' not in st.session_state:
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
 # =============================================================================
-# NUEVO: Controlar si ya se mostró la animación de bienvenida
+# NUEVO: Estado para controlar el mensaje de bienvenida
 # =============================================================================
-if 'bienvenida_mostrada' not in st.session_state:
-    st.session_state.bienvenida_mostrada = False
+if 'mostrar_bienvenida' not in st.session_state:
+    st.session_state.mostrar_bienvenida = False
 # =============================================================================
 
 # =============================================================================
@@ -419,37 +419,25 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
         # =========================================================================
-        # MODIFICADO: Ordenar por prioridad: primero check-out, luego stay-over
+        # MODIFICADO: Ordenar por prioridad (check-out primero, luego late checkout y cluster)
         # =========================================================================
-        # Añadir columna auxiliar para ordenar (check-out primero = 0, stay-over = 1)
+        # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
         if 'is_checkout' in df_bloque.columns:
-            df_bloque['prioridad_checkout'] = df_bloque['is_checkout'].apply(lambda x: 0 if x == 1 else 1)
+            df_bloque['prioridad_checkout'] = df_bloque['is_checkout']
         else:
-            df_bloque['prioridad_checkout'] = 1  # Si no hay columna, tratar como stay-over
+            df_bloque['prioridad_checkout'] = 0
         
-        # Ordenar: primero prioridad_checkout (0=check-out), luego col_prioridad, luego cluster, luego habitacion_id
-        sort_columns = ['prioridad_checkout']
-        sort_ascending = [True]  # True = 0 primero, luego 1
-        
-        if col_prioridad in df_bloque.columns:
-            sort_columns.append(col_prioridad)
-            sort_ascending.append(False)  # Mayor prioridad primero
-        
+        # Ordenar: primero check-out, luego por late checkout, luego por cluster, luego por habitación
         if 'cluster' in df_bloque.columns:
-            sort_columns.append('cluster')
-            sort_ascending.append(False)  # Mayor cluster primero (limpieza profunda)
-        
-        sort_columns.append('habitacion_id')
-        sort_ascending.append(True)  # Menor número de habitación primero
-        
-        df_bloque = df_bloque.sort_values(
-            by=sort_columns, 
-            ascending=sort_ascending
-        )
-        
-        # Eliminar columna auxiliar
-        if 'prioridad_checkout' in df_bloque.columns:
-            df_bloque = df_bloque.drop(columns=['prioridad_checkout'])
+            df_bloque = df_bloque.sort_values(
+                by=['prioridad_checkout', col_prioridad, 'cluster', 'habitacion_id'], 
+                ascending=[False, False, False, True]
+            )
+        else:
+            df_bloque = df_bloque.sort_values(
+                by=['prioridad_checkout', col_prioridad, 'habitacion_id'], 
+                ascending=[False, False, True]
+            )
         # =========================================================================
         
         if num_cam_bloque > 1:
@@ -646,6 +634,13 @@ def procesar_archivo(archivo):
         
         st.session_state.archivo_cargado = True
         st.session_state.selected_page = "📊 Gerente"
+        
+        # =========================================================================
+        # NUEVO: Activar mensaje de bienvenida
+        # =========================================================================
+        st.session_state.mostrar_bienvenida = True
+        # =========================================================================
+        
         st.success(f"✅ PMS cargado: {len(df)} habitaciones")
         time.sleep(1)
         st.rerun()
@@ -656,88 +651,6 @@ def procesar_archivo(archivo):
 
 def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
-    
-    # =========================================================================
-    # NUEVO: Animación de bienvenida (solo la primera vez)
-    # =========================================================================
-    if not st.session_state.bienvenida_mostrada:
-        # Mostrar animación de bienvenida
-        bienvenida_placeholder = st.empty()
-        
-        with bienvenida_placeholder.container():
-            st.markdown(
-                """
-                <div style="
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 400px;
-                    animation: fadeIn 2s;
-                ">
-                    <h1 style="
-                        color: #1E88E5;
-                        font-size: 48px;
-                        text-align: center;
-                        margin-bottom: 20px;
-                        animation: slideIn 1.5s;
-                    ">
-                        🏨 Bienvenid@ al Sistema Inteligente<br>de Limpieza del Hotel Bali
-                    </h1>
-                    <div style="
-                        width: 100px;
-                        height: 100px;
-                        border: 5px solid #1E88E5;
-                        border-top: 5px solid transparent;
-                        border-radius: 50%;
-                        animation: spin 1.5s linear infinite;
-                        margin-top: 30px;
-                    "></div>
-                    <p style="
-                        color: #666;
-                        font-size: 20px;
-                        margin-top: 30px;
-                        animation: pulse 2s infinite;
-                    ">
-                        Cargando interfaz...
-                    </p>
-                </div>
-                
-                <style>
-                    @keyframes fadeIn {
-                        0% { opacity: 0; }
-                        100% { opacity: 1; }
-                    }
-                    @keyframes slideIn {
-                        0% { transform: translateY(-50px); opacity: 0; }
-                        100% { transform: translateY(0); opacity: 1; }
-                    }
-                    @keyframes spin {
-                        0% { transform: rotate(0deg); }
-                        100% { transform: rotate(360deg); }
-                    }
-                    @keyframes pulse {
-                        0% { opacity: 0.6; }
-                        50% { opacity: 1; }
-                        100% { opacity: 0.6; }
-                    }
-                </style>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        # Esperar 3 segundos
-        time.sleep(3)
-        
-        # Limpiar la animación
-        bienvenida_placeholder.empty()
-        
-        # Marcar como mostrada
-        st.session_state.bienvenida_mostrada = True
-        
-        # Pequeña pausa para que se limpie bien
-        time.sleep(0.5)
-    # =========================================================================
     
     # Título principal (más pequeño y combinado)
     st.markdown(
@@ -1047,7 +960,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'bienvenida_mostrada']:  # <--- AÑADIDO
+                        'mostrar_bienvenida']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1067,6 +980,60 @@ def mostrar_sidebar():
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
+    # =========================================================================
+    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
+    # =========================================================================
+    if st.session_state.mostrar_bienvenida:
+        # Crear un placeholder para el mensaje
+        welcome_placeholder = st.empty()
+        
+        # Mostrar mensaje con animación
+        with welcome_placeholder.container():
+            st.markdown(
+                """
+                <div style="
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 80vh;
+                    text-align: center;
+                    animation: fadeInOut 3s ease-in-out;
+                ">
+                    <div>
+                        <h1 style="color: #FFD700; font-size: 3.5rem; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
+                            🏨 ¡Bienvenid@ al Sistema Inteligente de Limpieza!
+                        </h1>
+                        <h2 style="color: white; font-size: 2.5rem; animation: pulse 2s infinite;">
+                            Hotel Gran Bali
+                        </h2>
+                    </div>
+                </div>
+                
+                <style>
+                    @keyframes fadeInOut {
+                        0% { opacity: 0; transform: scale(0.9); }
+                        20% { opacity: 1; transform: scale(1); }
+                        80% { opacity: 1; transform: scale(1); }
+                        100% { opacity: 0; transform: scale(0.9); }
+                    }
+                    
+                    @keyframes pulse {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                        100% { transform: scale(1); }
+                    }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        # Esperar 3 segundos y luego quitar el mensaje
+        time.sleep(3)
+        welcome_placeholder.empty()
+        st.session_state.mostrar_bienvenida = False
+        st.rerun()
+    # =========================================================================
+    
     # Mostrar sidebar y luego la vista correspondiente
     mostrar_sidebar()
     selected = st.session_state.selected_page
@@ -1723,39 +1690,27 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                 if st.session_state.cluster_habitaciones:
                     df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # =========================================================================
-                # MODIFICADO: Ordenar pendientes por prioridad: primero check-out
-                # =========================================================================
-                # Añadir columna auxiliar para ordenar (check-out primero = 0, stay-over = 1)
+                # Ordenar por prioridad (primero check-out, luego cluster, luego late checkout)
                 if 'is_checkout' in df_pendientes.columns:
-                    df_pendientes['prioridad_checkout'] = df_pendientes['is_checkout'].apply(lambda x: 0 if x == 1 else 1)
-                else:
-                    df_pendientes['prioridad_checkout'] = 1
-                
-                # Ordenar: primero prioridad_checkout, luego late_checkout_pred, luego cluster, luego habitacion_id
-                sort_columns = ['prioridad_checkout']
-                sort_ascending = [True]
-                
-                if 'late_checkout_pred' in df_pendientes.columns:
-                    sort_columns.append('late_checkout_pred')
-                    sort_ascending.append(False)
-                
-                if 'cluster' in df_pendientes.columns:
-                    sort_columns.append('cluster')
-                    sort_ascending.append(False)
-                
-                sort_columns.append('habitacion_id')
-                sort_ascending.append(True)
-                
-                df_pendientes = df_pendientes.sort_values(
-                    by=sort_columns,
-                    ascending=sort_ascending
-                )
-                
-                # Eliminar columna auxiliar
-                if 'prioridad_checkout' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.drop(columns=['prioridad_checkout'])
-                # =========================================================================
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['is_checkout', 'cluster', 'late_checkout_pred', 'habitacion_id'], 
+                        ascending=[False, False, False, True]
+                    )
+                elif 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['cluster', 'late_checkout_pred', 'habitacion_id'], 
+                        ascending=[False, False, False]
+                    )
+                elif 'cluster' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['cluster', 'habitacion_id'], 
+                        ascending=[False, False]
+                    )
+                elif 'late_checkout_pred' in df_pendientes.columns:
+                    df_pendientes = df_pendientes.sort_values(
+                        by=['late_checkout_pred', 'habitacion_id'], 
+                        ascending=[False, False]
+                    )
                 
                 st.markdown(f"### Pendientes ({pendientes} restantes)")
                 
