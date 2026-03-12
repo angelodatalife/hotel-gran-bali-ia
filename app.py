@@ -614,29 +614,9 @@ def mostrar_pantalla_inicio():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Título "Cargar PMS" sin recuadro
-        st.markdown(
-            """
-            <h3 style='text-align: center; color: #333; margin-bottom: 20px;'>
-                Cargar PMS aquí ⬇️
-            </h3>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # File uploader de Streamlit (estilo drag and drop)
-        archivo = st.file_uploader(
-            "Arrastra tu archivo CSV aquí",
-            type=['csv'],
-            key="file_uploader_inicio",
-            label_visibility="collapsed"
-        )
-        
-        if archivo is not None:
-            procesar_archivo(archivo)
-        
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
+        # =========================================================================
+        # NUEVA POSICIÓN: Modelos cargados (ahora entre título y Cargar PMS)
+        # =========================================================================
         # Sección de modelos cargados (centrada)
         st.markdown(
             """
@@ -673,6 +653,33 @@ def mostrar_pantalla_inicio():
                 st.markdown("✅ NLP")
             else:
                 st.markdown("❌ NLP")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # =========================================================================
+        # Título "Cargar PMS aquí" con icono del hotel
+        # =========================================================================
+        st.markdown(
+            """
+            <h3 style='text-align: center; color: #333; margin-bottom: 20px;'>
+                🏨 Cargar PMS aquí ⬇️
+            </h3>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # File uploader de Streamlit (estilo drag and drop)
+        archivo = st.file_uploader(
+            "Arrastra tu archivo CSV aquí",
+            type=['csv'],
+            key="file_uploader_inicio",
+            label_visibility="collapsed"
+        )
+        
+        if archivo is not None:
+            procesar_archivo(archivo)
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -1425,7 +1432,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                         st.markdown(f"**{inc['tipo']}**")
                                 with cols[2]:
                                     if 'tiempo_estimado_xgb' in row:
-                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")  # 2 decimales
+                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")
                                 with cols[3]:
                                     if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
@@ -1498,7 +1505,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                             
                             with cols[2]:
                                 if 'tiempo_estimado_xgb' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")  # 2 decimales
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")
                             
                             with cols[3]:
                                 # Botón simple sin disabled
@@ -1550,7 +1557,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         
                         with cols[2]:
                             if 'tiempo_estimado_xgb' in row:
-                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")  # 2 decimales
+                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")
                         
                         with cols[3]:
                             if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
