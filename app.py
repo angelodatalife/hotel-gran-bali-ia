@@ -721,7 +721,7 @@ def mostrar_pantalla_inicio():
         <div style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100%; position: fixed; top: 0; left: 0; z-index: 999; pointer-events: none;">
             <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 6rem; text-align: center;">
                 Check it Out! <br>
-                <span style="font-size: 0.3em; display: block;">Hotel Clean App</span>
+                <span style="font-size: 0.5em; display: block;">Hotel Clean App</span>
             </h2>
         </div>
         """,
