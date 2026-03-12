@@ -719,7 +719,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <div class="title-container">
-            <h2 style='text-align: center; color: white; margin-bottom: 200px;'>
+            <h2 style='text-align: center; color: white; margin-bottom: 300px;'>
                 Check it Out! - Hotel Clean App
             </h2>
         </div>
@@ -741,7 +741,7 @@ def mostrar_pantalla_inicio():
         # Título "Cargar PMS" sin recuadro
         st.markdown(
             """
-            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 50px;'>
+            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 10px;'>
                 Cargar PMS ⬇️
             </h3>
             """,
