@@ -415,24 +415,29 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
         # =========================================================================
-        # MODIFICADO: Ordenar por prioridad: primero check-out, luego late checkout, luego cluster
+        # MODIFICADO: Priorizar check-outs sobre stay-overs en el orden
         # =========================================================================
+        # Añadir columna auxiliar para ordenar: check-out (1) va antes que stay-over (0)
         if 'is_checkout' in df_bloque.columns:
-            # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
+            df_bloque['orden_checkout'] = df_bloque['is_checkout'].astype(int)
+        else:
+            df_bloque['orden_checkout'] = 0
+        
+        # Ordenar por: prioridad (late checkout), luego check-out, luego cluster, luego habitación
+        if 'cluster' in df_bloque.columns:
             df_bloque = df_bloque.sort_values(
-                by=['is_checkout', col_prioridad, 'cluster', 'habitacion_id'], 
+                by=[col_prioridad, 'orden_checkout', 'cluster', 'habitacion_id'], 
                 ascending=[False, False, False, True]
-            )
-        elif 'cluster' in df_bloque.columns:
-            df_bloque = df_bloque.sort_values(
-                by=[col_prioridad, 'cluster', 'habitacion_id'], 
-                ascending=[False, False, True]
             )
         else:
             df_bloque = df_bloque.sort_values(
-                by=[col_prioridad, 'habitacion_id'], 
-                ascending=[False, True]
+                by=[col_prioridad, 'orden_checkout', 'habitacion_id'], 
+                ascending=[False, False, True]
             )
+        
+        # Eliminar columna auxiliar
+        if 'orden_checkout' in df_bloque.columns:
+            df_bloque = df_bloque.drop(columns=['orden_checkout'])
         # =========================================================================
         
         if num_cam_bloque > 1:
@@ -629,8 +634,7 @@ def procesar_archivo(archivo):
         
         st.session_state.archivo_cargado = True
         st.session_state.selected_page = "📊 Gerente"
-        st.session_state.mostrar_bienvenida = True
-        st.success(f"✅ PMS cargado: {len(df)} habitaciones")
+        st.session_state.mostrar_bienvenida = True  # Activar mensaje de bienvenida
         time.sleep(1)
         st.rerun()
 
@@ -645,8 +649,7 @@ def mostrar_pantalla_inicio():
     # NUEVO: Mostrar mensaje de bienvenida si corresponde
     # =========================================================================
     if st.session_state.get('mostrar_bienvenida', False):
-        bienvenida_placeholder = st.empty()
-        with bienvenida_placeholder.container():
+        with st.container():
             st.markdown(
                 """
                 <div style="
@@ -655,26 +658,24 @@ def mostrar_pantalla_inicio():
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background-color: rgba(0, 0, 0, 0.9);
+                    z-index: 9999;
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    z-index: 9999;
-                    animation: fadeOut 3s forwards;
+                    animation: fadeOut 5s forwards;
                 ">
                     <div style="
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        padding: 40px;
+                        border-radius: 20px;
                         text-align: center;
-                        color: white;
-                        font-size: 2.5rem;
-                        font-weight: bold;
-                        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-                        animation: slideIn 1s ease-out;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
                     ">
-                        🏨 Bienvenid@ al Sistema Inteligente<br>
-                        de Limpieza del Hotel Bali<br>
-                        <span style="font-size: 1.5rem; margin-top: 20px; display: block;">
-                            Cargando tu experiencia...
-                        </span>
+                        <h1 style="color: white; font-size: 48px; margin-bottom: 20px;">🏨</h1>
+                        <h2 style="color: white; font-size: 36px; margin-bottom: 10px;">¡Bienvenid@!</h2>
+                        <p style="color: white; font-size: 24px;">al Sistema Inteligente de Limpieza</p>
+                        <p style="color: white; font-size: 32px; font-weight: bold; margin-top: 10px;">Hotel Gran Bali</p>
                     </div>
                 </div>
                 <style>
@@ -683,17 +684,13 @@ def mostrar_pantalla_inicio():
                         70% { opacity: 1; }
                         100% { opacity: 0; visibility: hidden; }
                     }
-                    @keyframes slideIn {
-                        0% { transform: translateY(-50px); opacity: 0; }
-                        100% { transform: translateY(0); opacity: 1; }
-                    }
                 </style>
                 """,
                 unsafe_allow_html=True
             )
-        time.sleep(3)
+        # Programar la desactivación después de 5 segundos
+        time.sleep(5)
         st.session_state.mostrar_bienvenida = False
-        bienvenida_placeholder.empty()
         st.rerun()
     # =========================================================================
     
@@ -1004,8 +1001,7 @@ def mostrar_sidebar():
             for key in ['df_pms', 'incidencias', 'mantenimiento', 'opiniones', 'camarera_actual', 
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
-                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida']:
+                        'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1044,21 +1040,24 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     with tab_dashboard:
         st.title("📊 Dashboard Gerente - Hotel Gran Bali")
         
-        # Obtener número de checkouts estimados
-        if 'late_checkout_pred_combinado' in df.columns:
-            checkouts = int(df['late_checkout_pred_combinado'].sum())
-        elif 'late_checkout_pred' in df.columns:
-            checkouts = int(df['late_checkout_pred'].sum())
-        elif 'late_checkout_pred_xgb' in df.columns:
-            checkouts = int(df['late_checkout_pred_xgb'].sum())
+        # =========================================================================
+        # MODIFICADO: El contador de "Check Out" suma todos los is_checkout
+        # =========================================================================
+        if 'is_checkout' in df.columns:
+            total_checkouts = int(df['is_checkout'].sum())
         else:
-            checkouts = 0
+            total_checkouts = 0
+        # =========================================================================
         
-        # =========================================================================
-        # MODIFICADO: Calcular total de check-outs (is_checkout)
-        # =========================================================================
-        total_checkouts = int(df['is_checkout'].sum()) if 'is_checkout' in df.columns else 0
-        # =========================================================================
+        # Obtener número de late checkouts estimados
+        if 'late_checkout_pred_combinado' in df.columns:
+            late_checkouts = int(df['late_checkout_pred_combinado'].sum())
+        elif 'late_checkout_pred' in df.columns:
+            late_checkouts = int(df['late_checkout_pred'].sum())
+        elif 'late_checkout_pred_xgb' in df.columns:
+            late_checkouts = int(df['late_checkout_pred_xgb'].sum())
+        else:
+            late_checkouts = 0
         
         # Métricas principales en círculos
         col_metric1, col_metric2, col_metric3 = st.columns(3)
@@ -1687,30 +1686,8 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                 if st.session_state.cluster_habitaciones:
                     df_pendientes['cluster'] = df_pendientes['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # =========================================================================
-                # MODIFICADO: Ordenar pendientes: primero check-out, luego late checkout
-                # =========================================================================
-                if 'is_checkout' in df_pendientes.columns and 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['is_checkout', 'late_checkout_pred', 'cluster', 'habitacion_id'], 
-                        ascending=[False, False, False, False]
-                    )
-                elif 'is_checkout' in df_pendientes.columns and 'cluster' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['is_checkout', 'cluster', 'habitacion_id'], 
-                        ascending=[False, False, False]
-                    )
-                elif 'is_checkout' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['is_checkout', 'late_checkout_pred', 'habitacion_id'], 
-                        ascending=[False, False, False]
-                    )
-                elif 'is_checkout' in df_pendientes.columns:
-                    df_pendientes = df_pendientes.sort_values(
-                        by=['is_checkout', 'habitacion_id'], 
-                        ascending=[False, False]
-                    )
-                elif 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
+                # Ordenar por prioridad (cluster más alto primero = limpieza profunda)
+                if 'cluster' in df_pendientes.columns and 'late_checkout_pred' in df_pendientes.columns:
                     df_pendientes = df_pendientes.sort_values(
                         by=['late_checkout_pred', 'cluster', 'habitacion_id'], 
                         ascending=[False, False, False]
@@ -1725,7 +1702,6 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         by=['late_checkout_pred', 'habitacion_id'], 
                         ascending=[False, False]
                     )
-                # =========================================================================
                 
                 st.markdown(f"### Pendientes ({pendientes} restantes)")
                 
