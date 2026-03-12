@@ -13,6 +13,7 @@ from datetime import datetime
 import re
 import time
 import os
+import base64
 from sklearn.preprocessing import LabelEncoder
 
 # =============================================================================
@@ -103,10 +104,12 @@ if 'label_encoders' not in st.session_state:
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
 # =============================================================================
-# NUEVO: Estado para controlar el mensaje de bienvenida
+# NUEVO: Estado para controlar el mensaje de bienvenida y la pantalla de inicio
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
+if 'mostrar_pms' not in st.session_state:
+    st.session_state.mostrar_pms = False
 # =============================================================================
 
 # =============================================================================
@@ -636,11 +639,97 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
+# NUEVO: Función para mostrar la pantalla de inicio con imagen de fondo
+# =============================================================================
+def mostrar_pantalla_inicio_con_imagen():
+    """Muestra una pantalla de inicio con imagen de fondo clickeable"""
+    
+    # Cargar la imagen y codificarla en base64
+    @st.cache_data
+    def get_img_as_base64(file):
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    
+    img = get_img_as_base64("background.png")
+    
+    # Estilo CSS para la imagen de fondo y el botón invisible
+    page_bg_img = f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{img}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    
+    /* Hacer que toda la pantalla sea clickeable */
+    .stApp::before {{
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        z-index: 999;
+    }}
+    
+    /* Ocultar elementos de Streamlit que puedan interferir */
+    #root > div:nth-child(1) > div > div > div > div > section > div {{
+        background: transparent !important;
+    }}
+    
+    /* Ocultar el header de Streamlit */
+    header {{
+        display: none !important;
+    }}
+    
+    /* Mensaje flotante */
+    .click-message {{
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        background-color: rgba(0, 0, 0, 0.6);
+        padding: 12px 24px;
+        border-radius: 50px;
+        font-size: 18px;
+        font-weight: bold;
+        z-index: 1000;
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        animation: pulse 2s infinite;
+    }}
+    
+    @keyframes pulse {{
+        0% {{ transform: translateX(-50%) scale(1); opacity: 1; }}
+        50% {{ transform: translateX(-50%) scale(1.05); opacity: 0.9; }}
+        100% {{ transform: translateX(-50%) scale(1); opacity: 1; }}
+    }}
+    </style>
+    """
+    
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+    
+    # Mensaje flotante
+    st.markdown('<div class="click-message">👆 Haz clic en cualquier parte para continuar</div>', unsafe_allow_html=True)
+    
+    # Botón invisible que ocupa toda la pantalla
+    if st.button("", key="invisible_button", help="Haz clic para continuar"):
+        st.session_state.mostrar_pms = True
+        st.rerun()
+# =============================================================================
+
+# =============================================================================
 # PANTALLA DE INICIO (antes de cargar archivo)
 # =============================================================================
 
-def mostrar_pantalla_inicio():
-    """Muestra la pantalla de inicio centralizada"""
+def mostrar_pantalla_inicio_original():
+    """Muestra la pantalla de inicio original con el cargador de PMS"""
     
     # Título principal (más pequeño y combinado)
     st.markdown(
@@ -843,6 +932,7 @@ def mostrar_pantalla_inicio():
                     """,
                     unsafe_allow_html=True
                 )
+# =============================================================================
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -950,7 +1040,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida']:
+                        'mostrar_bienvenida', 'mostrar_pms']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -966,9 +1056,14 @@ def mostrar_sidebar():
 # LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
-# Si no hay archivo cargado, mostrar pantalla de inicio
+# Si no hay archivo cargado o estamos en la pantalla de inicio
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
-    mostrar_pantalla_inicio()
+    # Si mostrar_pms es False, mostrar la imagen de fondo
+    if not st.session_state.mostrar_pms:
+        mostrar_pantalla_inicio_con_imagen()
+    else:
+        # Mostrar la pantalla de inicio original con el cargador de PMS
+        mostrar_pantalla_inicio_original()
 else:
     # =========================================================================
     # NUEVO: Mostrar mensaje de bienvenida animado si está activado
