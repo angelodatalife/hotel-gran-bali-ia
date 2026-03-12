@@ -909,7 +909,7 @@ else:
                 ">
                     <div>
                         <h1 style="color: #FFD700; font-size: 3.5rem; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                            🏨 ¡Bienvenid@ al Sistema Inteligente de Limpieza!
+                            ...
                         </h1>
                         <h2 style="color: white; font-size: 2.5rem; animation: pulse 2s infinite;">
                             Cargando modelos inteligentes...
