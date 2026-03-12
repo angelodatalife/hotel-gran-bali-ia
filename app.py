@@ -13,8 +13,8 @@ from datetime import datetime
 import re
 import time
 import os
-import base64
 from sklearn.preprocessing import LabelEncoder
+import base64
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -108,24 +108,12 @@ if 'df_planta_stats' not in st.session_state:
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
-if 'mostrar_uploader' not in st.session_state:
-    st.session_state.mostrar_uploader = False
+if 'mostrar_inicio' not in st.session_state:
+    st.session_state.mostrar_inicio = True
 # =============================================================================
 
 # =============================================================================
 # FUNCIONES AUXILIARES
-# =============================================================================
-
-# =============================================================================
-# NUEVO: Función para cargar la imagen como base64
-# =============================================================================
-@st.cache_data
-def get_img_as_base64(file):
-    if os.path.exists(file):
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    return None
 # =============================================================================
 
 def limpiar_texto_opinion(texto):
@@ -156,8 +144,112 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 # =============================================================================
-# MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
+# NUEVO: Función para obtener imagen como base64
 # =============================================================================
+@st.cache_data
+def get_img_as_base64(file):
+    with open(file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+# =============================================================================
+# NUEVO: Función para mostrar la pantalla de inicio con imagen
+# =============================================================================
+def mostrar_pantalla_imagen_inicio():
+    """Muestra una pantalla completa con la imagen de fondo y un botón de entrada"""
+    
+    # Cargar la imagen
+    img = get_img_as_base64("background.png")
+    
+    # CSS para la pantalla de inicio
+    st.markdown(f"""
+    <style>
+        .stApp {{
+            background-image: url("data:image/png;base64,{img}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        
+        /* Ocultar elementos de Streamlit en esta pantalla */
+        #root > div:nth-child(1) > div > div > div > div > section > div {{
+            visibility: hidden;
+        }}
+        
+        /* Contenedor del botón */
+        .boton-entrada-container {{
+            position: fixed;
+            top: 50%;
+            right: 50px;
+            transform: translateY(-50%);
+            z-index: 1000;
+        }}
+        
+        /* Estilo del botón rectangular */
+        .boton-entrada {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            text-align: center;
+            min-width: 200px;
+            letter-spacing: 1px;
+            animation: pulse 2s infinite;
+        }}
+        
+        .boton-entrada:hover {{
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }}
+        
+        @keyframes pulse {{
+            0% {{
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            }}
+            50% {{
+                box-shadow: 0 4px 25px rgba(102, 126, 234, 0.8);
+            }}
+            100% {{
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            }}
+        }}
+        
+        /* Restaurar visibilidad cuando se hace clic */
+        .mostrar-app #root > div:nth-child(1) > div > div > div > div > section > div {{
+            visibility: visible;
+        }}
+    </style>
+    
+    <div class="boton-entrada-container">
+        <button class="boton-entrada" onclick="
+            document.querySelector('.stApp').classList.add('mostrar-app');
+            document.querySelector('.boton-entrada-container').style.display = 'none';
+            document.querySelectorAll('style')[0].innerHTML += '.stApp { background-image: none !important; }';
+            // Llamar a Streamlit para cambiar el estado
+            var script = document.createElement('script');
+            script.textContent = `parent.window.location.href = parent.window.location.href + '?inicio=false'`;
+            document.head.appendChild(script);
+        ">
+            🏨 ENTRAR
+        </button>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Verificar si se ha hecho clic en el botón (mediante parámetro URL)
+    query_params = st.query_params
+    if query_params.get("inicio") == ["false"]:
+        st.session_state.mostrar_inicio = False
+        st.rerun()
+# =============================================================================
+
 def aplicar_kmeans(df):
     """Aplica K-Means para segmentar habitaciones por perfil de limpieza (a nivel de habitación)"""
     # Verificar si el modelo K-Means existe y es accesible
@@ -240,7 +332,6 @@ def aplicar_kmeans(df):
     except Exception as e:
         # Silenciosamente fallar sin mostrar warning
         return {}
-# =============================================================================
 
 def predecir_late_checkout_xgboost(df):
     """Usa XGBoost para predecir late checkout"""
@@ -651,126 +742,11 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# NUEVA: Pantalla de inicio con imagen de fondo
-# =============================================================================
-def mostrar_pantalla_imagen():
-    """Muestra la pantalla de inicio con la imagen de fondo y un botón para avanzar"""
-    
-    # Cargar la imagen como base64
-    img_base64 = get_img_as_base64("background.png")
-    
-    if img_base64:
-        # Estilo para la imagen de fondo
-        page_bg_img = f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{img_base64}");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
-        
-        /* Ocultar elementos de Streamlit que puedan molestar */
-        #MainMenu {{visibility: hidden;}}
-        footer {{visibility: hidden;}}
-        header {{visibility: hidden;}}
-        
-        /* Estilo para el botón flotante */
-        .floating-btn {{
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            background-color: #FFD700;
-            color: #1E3A8A;
-            border: none;
-            border-radius: 50px;
-            padding: 15px 30px;
-            font-size: 20px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            z-index: 1000;
-            transition: transform 0.3s, background-color 0.3s;
-            animation: pulse 2s infinite;
-        }}
-        
-        .floating-btn:hover {{
-            background-color: #FFA500;
-            transform: scale(1.1);
-        }}
-        
-        @keyframes pulse {{
-            0% {{
-                box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
-            }}
-            70% {{
-                box-shadow: 0 0 0 15px rgba(255, 215, 0, 0);
-            }}
-            100% {{
-                box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
-            }}
-        }}
-        
-        /* Título superpuesto */
-        .title-overlay {{
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            z-index: 900;
-        }}
-        
-        .title-overlay h1 {{
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            background: linear-gradient(45deg, #FFD700, #FFA500);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }}
-        
-        .title-overlay p {{
-            font-size: 1.5rem;
-            opacity: 0.9;
-        }}
-        </style>
-        """
-        
-        st.markdown(page_bg_img, unsafe_allow_html=True)
-        
-        # Título superpuesto
-        st.markdown(
-            """
-            <div class="title-overlay">
-                <h1>Hotel Gran Bali</h1>
-                <p>Sistema Inteligente de Gestión de Limpieza</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Botón flotante para avanzar
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col3:
-            if st.button("▶️ Continuar", key="btn_continuar", help="Haz clic para continuar"):
-                st.session_state.mostrar_uploader = True
-                st.rerun()
-    else:
-        # Si no se encuentra la imagen, mostrar la pantalla de carga normal
-        st.session_state.mostrar_uploader = True
-        st.rerun()
+# PANTALLA DE INICIO (antes de cargar archivo)
 # =============================================================================
 
-# =============================================================================
-# PANTALLA DE CARGA DE ARCHIVOS (antes de cargar archivo)
-# =============================================================================
-
-def mostrar_pantalla_uploader():
-    """Muestra la pantalla para cargar el archivo PMS"""
+def mostrar_pantalla_inicio():
+    """Muestra la pantalla de inicio centralizada"""
     
     # Título principal (más pequeño y combinado)
     st.markdown(
@@ -973,12 +949,6 @@ def mostrar_pantalla_uploader():
                     """,
                     unsafe_allow_html=True
                 )
-        
-        # Botón para volver a la pantalla de imagen (opcional)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("⬅️ Volver a la pantalla de inicio", key="btn_volver"):
-            st.session_state.mostrar_uploader = False
-            st.rerun()
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -1086,7 +1056,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'mostrar_uploader']:
+                        'mostrar_bienvenida', 'mostrar_inicio']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1102,13 +1072,19 @@ def mostrar_sidebar():
 # LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
-# MODIFICADO: Lógica de navegación con la nueva pantalla de imagen
+# =============================================================================
+# NUEVO: Control de pantalla de inicio con imagen
+# =============================================================================
+# Verificar si debemos mostrar la pantalla de imagen de inicio
+if st.session_state.mostrar_inicio and not st.session_state.archivo_cargado:
+    mostrar_pantalla_imagen_inicio()
+    # Detener la ejecución para no mostrar el resto de la app
+    st.stop()
+# =============================================================================
+
+# Si no hay archivo cargado y no estamos en pantalla de imagen, mostrar pantalla de inicio normal
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
-    # Si no hay archivo cargado, mostrar la pantalla de imagen o la de uploader
-    if not st.session_state.mostrar_uploader:
-        mostrar_pantalla_imagen()
-    else:
-        mostrar_pantalla_uploader()
+    mostrar_pantalla_inicio()
 else:
     # =========================================================================
     # NUEVO: Mostrar mensaje de bienvenida animado si está activado
