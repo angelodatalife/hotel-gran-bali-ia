@@ -1053,15 +1053,21 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     with tab_dashboard:
         st.title("📊 Dashboard Gerente - Hotel Gran Bali")
         
-        # Obtener número de checkouts estimados
-        if 'late_checkout_pred_combinado' in df.columns:
-            checkouts = int(df['late_checkout_pred_combinado'].sum())
-        elif 'late_checkout_pred' in df.columns:
-            checkouts = int(df['late_checkout_pred'].sum())
-        elif 'late_checkout_pred_xgb' in df.columns:
-            checkouts = int(df['late_checkout_pred_xgb'].sum())
+        # Obtener número de checkouts (is_checkout)
+        if 'is_checkout' in df.columns:
+            total_checkouts = int(df['is_checkout'].sum())
         else:
-            checkouts = 0
+            total_checkouts = 0
+        
+        # Obtener número de checkouts estimados (late_checkout) - mantenido por compatibilidad
+        if 'late_checkout_pred_combinado' in df.columns:
+            late_checkouts = int(df['late_checkout_pred_combinado'].sum())
+        elif 'late_checkout_pred' in df.columns:
+            late_checkouts = int(df['late_checkout_pred'].sum())
+        elif 'late_checkout_pred_xgb' in df.columns:
+            late_checkouts = int(df['late_checkout_pred_xgb'].sum())
+        else:
+            late_checkouts = 0
         
         # Métricas principales en círculos
         col_metric1, col_metric2, col_metric3 = st.columns(3)
@@ -1127,7 +1133,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     margin: 0 auto;
                     background: transparent;
                 ">
-                    <div style="font-size: 32px; font-weight: bold;">{checkouts}</div>
+                    <div style="font-size: 32px; font-weight: bold;">{total_checkouts}</div>
                     <div style="font-size: 16px;">Check Out</div>
                 </div>
                 """,
