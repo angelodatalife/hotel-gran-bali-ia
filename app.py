@@ -719,7 +719,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <div class="title-container">
-            <h2 style='text-align: center; color: white; margin: 0;'>
+            <h2 style='text-align: center; color: white; margin-bottom: 100px;'>
                 Check it Out! - Hotel Clean App
             </h2>
         </div>
