@@ -14,6 +14,7 @@ import re
 import time
 import os
 from sklearn.preprocessing import LabelEncoder
+import base64  # <--- AÑADIDO PARA LA IMAGEN DE FONDO
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -642,6 +643,53 @@ def procesar_archivo(archivo):
 def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
     
+    # =========================================================================
+    # NUEVO: Añadir imagen de fondo
+    # =========================================================================
+    @st.cache_data
+    def get_img_as_base64(file):
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    
+    # Cargar la imagen de fondo si existe
+    img_path = "background.jpg"
+    if os.path.exists(img_path):
+        img = get_img_as_base64(img_path)
+        
+        page_bg_img = f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/jpeg;base64,{img}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        
+        /* Hacer que el contenido sea legible sobre la imagen */
+        .main > div {{
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 2rem;
+            border-radius: 10px;
+            backdrop-filter: blur(3px);
+        }}
+        
+        /* Asegurar que el texto sea blanco y legible */
+        h2, h3, h4, p, span, div {{
+            color: white !important;
+        }}
+        
+        /* Mantener los botones y elementos interactivos con su estilo */
+        .stButton button, .stFileUploader {{
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            color: black !important;
+        }}
+        </style>
+        """
+        st.markdown(page_bg_img, unsafe_allow_html=True)
+    # =========================================================================
+    
     # Título principal (más pequeño y combinado)
     st.markdown(
         """
@@ -656,7 +704,7 @@ def mostrar_pantalla_inicio():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Título "Cargar PMS" sin recuadro - AHORA EN BLANCO
+        # Título "Cargar PMS" sin recuadro
         st.markdown(
             """
             <h3 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
