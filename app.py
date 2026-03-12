@@ -739,17 +739,29 @@ def mostrar_pantalla_inicio():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Título "Cargar PMS" sin recuadro
-        st.markdown(
-            """
-            <h3 style='text-align: center; color: #1E88E5; margin-top: 400px;'>
+    # Título "Cargar PMS" fijo en la parte inferior
+    st.markdown(
+        """
+        <div style="position: fixed; bottom: 30px; left: 0; right: 0; margin: auto; width: 100%; max-width: 600px; text-align: center; z-index: 999;">
+            <h3 style='color: #1E88E5; margin: 0;'>
                 Cargar PMS ⬇️
             </h3>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # File uploader de Streamlit (estilo drag and drop)
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # File uploader de Streamlit (estilo drag and drop) - también fijo
+    st.markdown(
+        """
+        <div style="position: fixed; bottom: 80px; left: 0; right: 0; margin: auto; width: 100%; max-width: 600px; text-align: center; z-index: 999;">
+        """,
+        unsafe_allow_html=True
+    )
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
         archivo = st.file_uploader(
             "Arrastra tu archivo CSV aquí",
             type=['csv'],
