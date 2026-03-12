@@ -13,8 +13,8 @@ from datetime import datetime
 import re
 import time
 import os
+import base64  # <--- AÑADIDO PARA LA IMAGEN DE FONDO
 from sklearn.preprocessing import LabelEncoder
-import base64
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -108,6 +108,41 @@ if 'df_planta_stats' not in st.session_state:
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
+# =============================================================================
+
+# =============================================================================
+# FUNCIÓN PARA CARGAR LA IMAGEN DE FONDO
+# =============================================================================
+def get_img_as_base64(file):
+    with open(file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+# Verificar si existe la imagen y cargarla
+if os.path.exists("background.jpg"):
+    img = get_img_as_base64("background.jpg")
+    
+    page_bg_img = f"""
+    <style>
+    [data-testid="stAppViewContainer"] > .main {{
+        background-image: url("data:image/jpeg;base64,{img}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    
+    [data-testid="stHeader"] {{
+        background: rgba(0,0,0,0);
+    }}
+    
+    [data-testid="stToolbar"] {{
+        right: 2rem;
+    }}
+    </style>
+    """
+else:
+    page_bg_img = ""
 # =============================================================================
 
 # =============================================================================
@@ -643,48 +678,14 @@ def procesar_archivo(archivo):
 def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
     
-    # =========================================================================
-    # NUEVO: Configurar imagen de fondo
-    # =========================================================================
-    @st.cache_data
-    def get_img_as_base64(file):
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    
-    img = get_img_as_base64("background.jpg")
-    
-    page_bg_img = f"""
-    <style>
-    [data-testid="stAppViewContainer"] > .main {{
-        background-image: url("data:image/jpeg;base64,{img}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    
-    [data-testid="stHeader"] {{
-        background: rgba(0,0,0,0);
-    }}
-    
-    /* Hacer que el contenido tenga fondo semitransparente para mejor legibilidad */
-    .stApp [data-testid="stVerticalBlock"] > div:first-child {{
-        background-color: rgba(0, 0, 0, 0.5);
-        padding: 2rem;
-        border-radius: 10px;
-        backdrop-filter: blur(5px);
-    }}
-    </style>
-    """
-    
-    st.markdown(page_bg_img, unsafe_allow_html=True)
-    # =========================================================================
+    # Aplicar el fondo solo en la pantalla de inicio
+    if page_bg_img:
+        st.markdown(page_bg_img, unsafe_allow_html=True)
     
     # Título principal (más pequeño y combinado)
     st.markdown(
         """
-        <h2 style='text-align: center; color: white; margin-top: 5px; margin-bottom: 25px;'>
+        <h2 style='text-align: center; color: white; margin-top: 5px; margin-bottom: 25px; text-shadow: 2px 2px 4px rgba(0,0,0,0.7);'>
             🏨 Check it Out! - App
         </h2>
         """,
@@ -695,10 +696,10 @@ def mostrar_pantalla_inicio():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Título "Cargar PMS" sin recuadro - AHORA EN BLANCO
+        # Título "Cargar PMS" con mejor contraste
         st.markdown(
             """
-            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
+            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); background-color: rgba(255,255,255,0.7); padding: 10px; border-radius: 10px;'>
                 Cargar PMS ⬇️
             </h3>
             """,
@@ -721,7 +722,7 @@ def mostrar_pantalla_inicio():
         # Sección de modelos cargados (centrada)
         st.markdown(
             """
-            <h4 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
+            <h4 style='text-align: center; color: #1E88E5; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); background-color: rgba(255,255,255,0.7); padding: 10px; border-radius: 10px;'>
                 🤖 Modelos Inteligentes Cargados...
             </h4>
             """,
@@ -744,6 +745,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #4CAF50;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ✅ ANN
                     </div>
@@ -762,6 +764,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #FF4444;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ❌ ANN
                     </div>
@@ -782,6 +785,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #4CAF50;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ✅ XGBoost
                     </div>
@@ -800,6 +804,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #FF4444;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ❌ XGBoost
                     </div>
@@ -820,6 +825,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #4CAF50;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ✅ K-Means
                     </div>
@@ -838,6 +844,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #FF4444;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ❌ K-Means
                     </div>
@@ -858,6 +865,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #4CAF50;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ✅ NLP
                     </div>
@@ -876,6 +884,7 @@ def mostrar_pantalla_inicio():
                         color: white;
                         font-size: 18px;
                         border: 1px solid #FF4444;
+                        box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
                     ">
                         ❌ NLP
                     </div>
