@@ -645,7 +645,7 @@ def mostrar_pantalla_inicio():
     # Título principal (más pequeño y combinado)
     st.markdown(
         """
-        <h2 style='text-align: center; color: #1E88E5; margin-top: 100px; margin-bottom: 5px;'>
+        <h2 style='text-align: center; color: #1E88E5; margin-top: 10px; margin-bottom: 15px;'>
             🏨 Check it Out! - App
         </h2>
         """,
