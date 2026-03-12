@@ -682,7 +682,7 @@ def mostrar_pantalla_inicio():
         # Sección de modelos cargados (centrada)
         st.markdown(
             """
-            <h4 style='text-align: center; color: white; margin-bottom: 20px;'>
+            <h4 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
                 🤖 Modelos cargados
             </h4>
             """,
