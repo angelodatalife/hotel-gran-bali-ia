@@ -719,8 +719,8 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <div style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100%; position: fixed; top: 0; left: 0; z-index: 999; pointer-events: none;">
-            <h2 style="color: #FFD700; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 6rem; text-align: center;">
-                Check it Out! <br>
+            <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 6rem; text-align: center;">
+                <span style="color: #FFD700;">Check it Out!</span><br>
                 <span style="font-size: 0.5em; display: block;">Hotel Clean App (IA)</span>
             </h2>
         </div>
