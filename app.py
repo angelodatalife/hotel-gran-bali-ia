@@ -14,7 +14,6 @@ import re
 import time
 import os
 from sklearn.preprocessing import LabelEncoder
-import base64
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -104,12 +103,10 @@ if 'label_encoders' not in st.session_state:
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
 # =============================================================================
-# NUEVO: Estado para controlar el mensaje de bienvenida y la pantalla de inicio
+# NUEVO: Estado para controlar el mensaje de bienvenida
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
-if 'mostrar_inicio' not in st.session_state:
-    st.session_state.mostrar_inicio = True
 # =============================================================================
 
 # =============================================================================
@@ -144,112 +141,8 @@ def formatear_tiempo(segundos):
     return f"{minutos}:{segs:02d}"
 
 # =============================================================================
-# NUEVO: Función para obtener imagen como base64
+# MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
 # =============================================================================
-@st.cache_data
-def get_img_as_base64(file):
-    with open(file, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
-# =============================================================================
-# NUEVO: Función para mostrar la pantalla de inicio con imagen
-# =============================================================================
-def mostrar_pantalla_imagen_inicio():
-    """Muestra una pantalla completa con la imagen de fondo y un botón de entrada"""
-    
-    # Cargar la imagen
-    img = get_img_as_base64("background.png")
-    
-    # CSS para la pantalla de inicio
-    st.markdown(f"""
-    <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{img}");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
-        
-        /* Ocultar elementos de Streamlit en esta pantalla */
-        #root > div:nth-child(1) > div > div > div > div > section > div {{
-            visibility: hidden;
-        }}
-        
-        /* Contenedor del botón */
-        .boton-entrada-container {{
-            position: fixed;
-            top: 50%;
-            right: 50px;
-            transform: translateY(-50%);
-            z-index: 1000;
-        }}
-        
-        /* Estilo del botón rectangular */
-        .boton-entrada {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px 40px;
-            font-size: 24px;
-            font-weight: bold;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            transition: all 0.3s ease;
-            text-align: center;
-            min-width: 200px;
-            letter-spacing: 1px;
-            animation: pulse 2s infinite;
-        }}
-        
-        .boton-entrada:hover {{
-            transform: scale(1.05);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-        }}
-        
-        @keyframes pulse {{
-            0% {{
-                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-            }}
-            50% {{
-                box-shadow: 0 4px 25px rgba(102, 126, 234, 0.8);
-            }}
-            100% {{
-                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-            }}
-        }}
-        
-        /* Restaurar visibilidad cuando se hace clic */
-        .mostrar-app #root > div:nth-child(1) > div > div > div > div > section > div {{
-            visibility: visible;
-        }}
-    </style>
-    
-    <div class="boton-entrada-container">
-        <button class="boton-entrada" onclick="
-            document.querySelector('.stApp').classList.add('mostrar-app');
-            document.querySelector('.boton-entrada-container').style.display = 'none';
-            document.querySelectorAll('style')[0].innerHTML += '.stApp { background-image: none !important; }';
-            // Llamar a Streamlit para cambiar el estado
-            var script = document.createElement('script');
-            script.textContent = `parent.window.location.href = parent.window.location.href + '?inicio=false'`;
-            document.head.appendChild(script);
-        ">
-            🏨 ENTRAR
-        </button>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Verificar si se ha hecho clic en el botón (mediante parámetro URL)
-    query_params = st.query_params
-    if query_params.get("inicio") == ["false"]:
-        st.session_state.mostrar_inicio = False
-        st.rerun()
-# =============================================================================
-
 def aplicar_kmeans(df):
     """Aplica K-Means para segmentar habitaciones por perfil de limpieza (a nivel de habitación)"""
     # Verificar si el modelo K-Means existe y es accesible
@@ -332,6 +225,7 @@ def aplicar_kmeans(df):
     except Exception as e:
         # Silenciosamente fallar sin mostrar warning
         return {}
+# =============================================================================
 
 def predecir_late_checkout_xgboost(df):
     """Usa XGBoost para predecir late checkout"""
@@ -1056,7 +950,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'mostrar_inicio']:
+                        'mostrar_bienvenida']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1072,17 +966,7 @@ def mostrar_sidebar():
 # LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
-# =============================================================================
-# NUEVO: Control de pantalla de inicio con imagen
-# =============================================================================
-# Verificar si debemos mostrar la pantalla de imagen de inicio
-if st.session_state.mostrar_inicio and not st.session_state.archivo_cargado:
-    mostrar_pantalla_imagen_inicio()
-    # Detener la ejecución para no mostrar el resto de la app
-    st.stop()
-# =============================================================================
-
-# Si no hay archivo cargado y no estamos en pantalla de imagen, mostrar pantalla de inicio normal
+# Si no hay archivo cargado, mostrar pantalla de inicio
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
