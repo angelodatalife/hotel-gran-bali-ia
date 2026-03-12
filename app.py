@@ -718,8 +718,8 @@ def mostrar_pantalla_inicio():
     # Título principal en el centro
     st.markdown(
         """
-        <div style="position: absolute; top: -20px; right: 10px; z-index: 999;">
-            <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 4rem;">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100%; position: fixed; top: 0; left: 0; z-index: 999; pointer-events: none;">
+            <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 4rem; text-align: center;">
                 Check it Out! <br>
                 <span style="font-size: 0.7em; display: block;">Hotel Clean App</span>
             </h2>
