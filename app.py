@@ -13,6 +13,7 @@ from datetime import datetime
 import re
 import time
 import os
+import base64
 from sklearn.preprocessing import LabelEncoder
 
 # =============================================================================
@@ -103,12 +104,12 @@ if 'label_encoders' not in st.session_state:
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
 # =============================================================================
-# NUEVO: Estado para controlar el mensaje de bienvenida y la pantalla de inicio con imagen
+# NUEVO: Estado para controlar el mensaje de bienvenida y la imagen de fondo
 # =============================================================================
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
-if 'mostrar_pantalla_imagen' not in st.session_state:
-    st.session_state.mostrar_pantalla_imagen = True
+if 'mostrar_imagen_fondo' not in st.session_state:
+    st.session_state.mostrar_imagen_fondo = True
 # =============================================================================
 
 # =============================================================================
@@ -141,6 +142,16 @@ def formatear_tiempo(segundos):
     minutos = int(segundos // 60)
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
+
+# =============================================================================
+# NUEVO: Función para codificar imagen a base64
+# =============================================================================
+@st.cache_data
+def get_img_as_base64(file):
+    with open(file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+# =============================================================================
 
 # =============================================================================
 # MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
@@ -638,275 +649,266 @@ def procesar_archivo(archivo):
         st.rerun()
 
 # =============================================================================
-# NUEVO: Función para mostrar la pantalla de imagen de inicio
-# =============================================================================
-def mostrar_pantalla_imagen():
-    """Muestra la imagen background.png durante 5 segundos"""
-    
-    # Leer la imagen y codificarla en base64
-    import base64
-    
-    try:
-        with open("background.png", "rb") as f:
-            img_data = f.read()
-            img_base64 = base64.b64encode(img_data).decode()
-        
-        # Crear un placeholder para la imagen
-        image_placeholder = st.empty()
-        
-        # Mostrar la imagen a pantalla completa
-        with image_placeholder.container():
-            st.markdown(
-                f"""
-                <style>
-                    .stApp {{
-                        background-image: url(data:image/png;base64,{img_base64});
-                        background-size: cover;
-                        background-position: center;
-                        background-repeat: no-repeat;
-                        height: 100vh;
-                        margin: 0;
-                        padding: 0;
-                    }}
-                    .fade-in {{
-                        animation: fadeIn 5s ease-in-out;
-                    }}
-                    @keyframes fadeIn {{
-                        0% {{ opacity: 0; }}
-                        20% {{ opacity: 1; }}
-                        80% {{ opacity: 1; }}
-                        100% {{ opacity: 0; }}
-                    }}
-                </style>
-                <div class="fade-in" style="height: 100vh; width: 100vw;"></div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        # Esperar 5 segundos
-        time.sleep(5)
-        
-        # Limpiar el placeholder
-        image_placeholder.empty()
-        
-        # Marcar que ya no debe mostrar la pantalla de imagen
-        st.session_state.mostrar_pantalla_imagen = False
-        st.rerun()
-        
-    except FileNotFoundError:
-        # Si no encuentra la imagen, pasar directamente a la pantalla de inicio
-        st.session_state.mostrar_pantalla_imagen = False
-        st.rerun()
-# =============================================================================
-
-# =============================================================================
 # PANTALLA DE INICIO (antes de cargar archivo)
 # =============================================================================
 
 def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
     
-    # Título principal (más pequeño y combinado)
-    st.markdown(
-        """
-        <h2 style='text-align: center; color: #1E88E5; margin-top: 50px; margin-bottom: 30px;'>
-            🏨 Hotel Gran Bali - Sistema de Gestión IA de Limpieza
-        </h2>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    # Contenedor central para la carga de archivos
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        # Título "Cargar PMS" sin recuadro - AHORA EN BLANCO
+    # =========================================================================
+    # NUEVO: Mostrar imagen de fondo si está activada
+    # =========================================================================
+    if st.session_state.mostrar_imagen_fondo and os.path.exists("background.png"):
+        # Codificar imagen a base64
+        img_base64 = get_img_as_base64("background.png")
+        
+        # Crear HTML con la imagen de fondo clickeable
         st.markdown(
-            """
-            <h3 style='text-align: center; color: white; margin-bottom: 20px;'>
-                Cargar PMS aquí ⬇️
-            </h3>
+            f"""
+            <style>
+            .imagen-fondo {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-image: url("data:image/png;base64,{img_base64}");
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                z-index: 9999;
+                cursor: pointer;
+            }}
+            </style>
+            
+            <div class="imagen-fondo" onclick="
+                var elements = document.getElementsByClassName('imagen-fondo');
+                for(var i=0; i<elements.length; i++) {{
+                    elements[i].style.display = 'none';
+                }}
+            "></div>
+            
+            <script>
+            // También permitir hacer clic en cualquier parte de la imagen
+            document.addEventListener('click', function() {{
+                var elements = document.getElementsByClassName('imagen-fondo');
+                for(var i=0; i<elements.length; i++) {{
+                    elements[i].style.display = 'none';
+                }}
+            }});
+            </script>
             """,
             unsafe_allow_html=True
         )
         
-        # File uploader de Streamlit (estilo drag and drop)
-        archivo = st.file_uploader(
-            "Arrastra tu archivo CSV aquí",
-            type=['csv'],
-            key="file_uploader_inicio",
-            label_visibility="collapsed"
-        )
-        
-        if archivo is not None:
-            procesar_archivo(archivo)
-        
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        # Sección de modelos cargados (centrada)
+        # Botón oculto para capturar el clic en Streamlit
+        if st.button(" ", key="btn_oculto_imagen", help="Haz clic en cualquier parte de la imagen para continuar"):
+            st.session_state.mostrar_imagen_fondo = False
+            st.rerun()
+    else:
+        # Mostrar la interfaz normal de carga de archivos
+        # Título principal (más pequeño y combinado)
         st.markdown(
             """
-            <h4 style='text-align: center; color: white; margin-bottom: 20px;'>
-                🤖 Modelos cargados
-            </h4>
+            <h2 style='text-align: center; color: #1E88E5; margin-top: 50px; margin-bottom: 30px;'>
+                🏨 Hotel Gran Bali - Sistema de Gestión IA de Limpieza
+            </h2>
             """,
             unsafe_allow_html=True
         )
         
-        # Mostrar modelos en fila (centrados) CON MAYOR CONTRASTE
-        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+        # Contenedor central para la carga de archivos
+        col1, col2, col3 = st.columns([1, 2, 1])
         
-        with col_mod1:
-            if modelos.get('ann') is not None:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #2a6d2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #4CAF50;
-                    ">
-                        ✅ ANN
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #6d2a2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #FF4444;
-                    ">
-                        ❌ ANN
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-        
-        with col_mod2:
-            if modelos.get('xgboost') is not None:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #2a6d2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #4CAF50;
-                    ">
-                        ✅ XGBoost
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #6d2a2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #FF4444;
-                    ">
-                        ❌ XGBoost
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-        
-        with col_mod3:
-            if modelos.get('kmeans') is not None:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #2a6d2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #4CAF50;
-                    ">
-                        ✅ K-Means
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #6d2a2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #FF4444;
-                    ">
-                        ❌ K-Means
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-        
-        with col_mod4:
-            if modelos.get('nlp') is not None:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #2a6d2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #4CAF50;
-                    ">
-                        ✅ NLP
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    """
-                    <div style="
-                        background-color: #6d2a2a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        text-align: center;
-                        font-weight: bold;
-                        color: white;
-                        font-size: 18px;
-                        border: 1px solid #FF4444;
-                    ">
-                        ❌ NLP
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+        with col2:
+            # Título "Cargar PMS" sin recuadro - AHORA EN BLANCO
+            st.markdown(
+                """
+                <h3 style='text-align: center; color: white; margin-bottom: 20px;'>
+                    Cargar PMS aquí ⬇️
+                </h3>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # File uploader de Streamlit (estilo drag and drop)
+            archivo = st.file_uploader(
+                "Arrastra tu archivo CSV aquí",
+                type=['csv'],
+                key="file_uploader_inicio",
+                label_visibility="collapsed"
+            )
+            
+            if archivo is not None:
+                procesar_archivo(archivo)
+            
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            
+            # Sección de modelos cargados (centrada)
+            st.markdown(
+                """
+                <h4 style='text-align: center; color: white; margin-bottom: 20px;'>
+                    🤖 Modelos cargados
+                </h4>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # Mostrar modelos en fila (centrados) CON MAYOR CONTRASTE
+            col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+            
+            with col_mod1:
+                if modelos.get('ann') is not None:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #2a6d2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #4CAF50;
+                        ">
+                            ✅ ANN
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #6d2a2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #FF4444;
+                        ">
+                            ❌ ANN
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            
+            with col_mod2:
+                if modelos.get('xgboost') is not None:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #2a6d2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #4CAF50;
+                        ">
+                            ✅ XGBoost
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #6d2a2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #FF4444;
+                        ">
+                            ❌ XGBoost
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            
+            with col_mod3:
+                if modelos.get('kmeans') is not None:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #2a6d2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #4CAF50;
+                        ">
+                            ✅ K-Means
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #6d2a2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #FF4444;
+                        ">
+                            ❌ K-Means
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            
+            with col_mod4:
+                if modelos.get('nlp') is not None:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #2a6d2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #4CAF50;
+                        ">
+                            ✅ NLP
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div style="
+                            background-color: #6d2a2a;
+                            border-radius: 8px;
+                            padding: 12px;
+                            text-align: center;
+                            font-weight: bold;
+                            color: white;
+                            font-size: 18px;
+                            border: 1px solid #FF4444;
+                        ">
+                            ❌ NLP
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+    # =========================================================================
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -1014,7 +1016,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'mostrar_pantalla_imagen']:
+                        'mostrar_bienvenida', 'mostrar_imagen_fondo']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1030,15 +1032,8 @@ def mostrar_sidebar():
 # LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
-# =========================================================================
-# NUEVO: Mostrar pantalla de imagen primero si está activada
-# =========================================================================
-if st.session_state.mostrar_pantalla_imagen:
-    mostrar_pantalla_imagen()
-# =========================================================================
-
 # Si no hay archivo cargado, mostrar pantalla de inicio
-elif not st.session_state.archivo_cargado or st.session_state.df_pms is None:
+if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
     # =========================================================================
