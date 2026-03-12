@@ -163,17 +163,32 @@ def aplicar_kmeans(df):
         # Crear features por planta
         df_copy = df.copy()
         
+        # =========================================================================
+        # MODIFICADO: Añadir 'is_checkout' a las estadísticas por planta
+        # =========================================================================
         # Calcular estadísticas por planta
-        planta_stats = df_copy.groupby('planta').agg({
+        agg_dict = {
             'tiempo_estimado_xgb': 'mean',
             'late_checkout': 'mean',
             'noches_estancia': 'mean',
             'num_huespedes': 'mean',
             'tiene_ninos': 'mean'
-        }).reset_index()
+        }
         
-        planta_stats.columns = ['planta', 'tiempo_promedio', 'tasa_late_checkout', 
-                               'noches_promedio', 'huespedes_promedio', 'tasa_ninos']
+        # Añadir is_checkout si existe en el dataframe
+        if 'is_checkout' in df_copy.columns:
+            agg_dict['is_checkout'] = 'mean'
+        
+        planta_stats = df_copy.groupby('planta').agg(agg_dict).reset_index()
+        
+        # Renombrar columnas
+        column_names = ['planta', 'tiempo_promedio', 'tasa_late_checkout', 
+                        'noches_promedio', 'huespedes_promedio', 'tasa_ninos']
+        if 'is_checkout' in agg_dict:
+            column_names.insert(3, 'tasa_checkout')  # Insertar después de tasa_late_checkout
+        
+        planta_stats.columns = column_names
+        # =========================================================================
         
         # Añadir características adicionales
         planta_stats['sector_num'] = planta_stats['planta'].apply(
@@ -183,10 +198,12 @@ def aplicar_kmeans(df):
             lambda x: 18 if x <= 15 else (10 if x <= 30 else (3 if x <= 42 else 2))
         )
         
-        # Seleccionar features para clustering
-        feature_cols = ['planta', 'tiempo_promedio', 'tasa_late_checkout',
-                       'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
-                       'sector_num', 'num_habitaciones']
+        # Seleccionar features para clustering (usando las que tiene el modelo)
+        feature_cols = features_kmeans if features_kmeans else [
+            'planta', 'tiempo_promedio', 'tasa_late_checkout',
+            'noches_promedio', 'huespedes_promedio', 'tasa_ninos',
+            'sector_num', 'num_habitaciones'
+        ]
         
         # Verificar que todas las columnas existen
         available_cols = [col for col in feature_cols if col in planta_stats.columns]
@@ -241,7 +258,7 @@ def predecir_late_checkout_xgboost(df):
         df_copy = df.copy()
         
         # Limpiar valores NaN
-        for col in ['noches_estancia', 'num_huespedes', 'planta']:
+        for col in ['noches_estancia', 'num_huespedes', 'planta', 'is_checkout']:
             if col in df_copy.columns:
                 df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         
@@ -293,7 +310,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     df_asignar = df.copy()
     
     # Limpiar valores NaN en columnas importantes
-    for col in ['planta', 'habitacion_id', 'tiempo_estimado_xgb']:
+    for col in ['planta', 'habitacion_id', 'tiempo_estimado_xgb', 'is_checkout']:
         if col in df_asignar.columns:
             df_asignar[col] = pd.to_numeric(df_asignar[col], errors='coerce').fillna(0)
     
@@ -336,9 +353,15 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
                 feature_cols = []
             
             if ann_model is not None and scaler_ann is not None and feature_cols:
-                cols_disponibles = [c for c in feature_cols if c in df_asignar.columns]
+                # Asegurar que todas las features existen
+                df_temp = df_asignar.copy()
+                for col in feature_cols:
+                    if col not in df_temp.columns:
+                        df_temp[col] = 0
+                
+                cols_disponibles = [c for c in feature_cols if c in df_temp.columns]
                 if len(cols_disponibles) == len(feature_cols):
-                    X_ann = df_asignar[feature_cols].values.astype(float)
+                    X_ann = df_temp[feature_cols].values.astype(float)
                     X_ann_scaled = scaler_ann.transform(X_ann)
                     
                     prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
@@ -458,14 +481,21 @@ def procesar_archivo(archivo):
     with st.spinner("Procesando archivo..."):
         df = pd.read_csv(archivo)
         
-        # Asegurar que existen las columnas necesarias
-        columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 'sentimiento_nlp']
+        # =========================================================================
+        # MODIFICADO: Asegurar que existen las columnas necesarias
+        # =========================================================================
+        columnas_necesarias = ['tiempo_real', 'incidencia_camarera', 'opinion_cliente', 
+                               'sentimiento_nlp', 'is_checkout']
         for col in columnas_necesarias:
             if col not in df.columns:
-                df[col] = None
+                if col == 'is_checkout':
+                    df[col] = 0  # Por defecto, asumir stay-over si no existe
+                else:
+                    df[col] = None
+        # =========================================================================
         
         # Limpiar valores NaN en columnas numéricas
-        for col in ['planta', 'habitacion_id', 'noches_estancia', 'num_huespedes']:
+        for col in ['planta', 'habitacion_id', 'noches_estancia', 'num_huespedes', 'is_checkout']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
@@ -483,9 +513,15 @@ def procesar_archivo(archivo):
                     feature_cols = []
                 
                 if ann_model is not None and scaler_ann is not None and feature_cols:
-                    cols_disponibles = [c for c in feature_cols if c in df.columns]
+                    # Asegurar que todas las features existen
+                    df_temp = df.copy()
+                    for col in feature_cols:
+                        if col not in df_temp.columns:
+                            df_temp[col] = 0
+                    
+                    cols_disponibles = [c for c in feature_cols if c in df_temp.columns]
                     if len(cols_disponibles) == len(feature_cols):
-                        X_ann = df[feature_cols].values.astype(float)
+                        X_ann = df_temp[feature_cols].values.astype(float)
                         X_ann_scaled = scaler_ann.transform(X_ann)
                         
                         prob_late = ann_model.predict_proba(X_ann_scaled)[:, 1]
@@ -1191,6 +1227,9 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                             row = df_sector[df_sector['habitacion_id'] == hab_id].iloc[0]
                             if 'tiempo_estimado_xgb' in row:
                                 tooltip += f"\nTiempo: {row['tiempo_estimado_xgb']} min"
+                            if 'is_checkout' in row:
+                                tipo = "Check-out" if row['is_checkout'] == 1 else "Stay-over"
+                                tooltip += f"\nTipo: {tipo}"
                             if st.session_state.cluster_habitaciones and hab_id in st.session_state.cluster_habitaciones:
                                 cluster = st.session_state.cluster_habitaciones[hab_id]
                                 tooltip += f"\nPerfil: {cluster}"
@@ -1422,6 +1461,10 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                     with col_crono1:
                         st.markdown(f"**Habitación:** {int(hab['habitacion_id'])}")
                         st.markdown(f"**Planta:** {int(hab['planta'])}")
+                        # Mostrar tipo (check-out / stay-over)
+                        if 'is_checkout' in hab:
+                            tipo_hab = "🔴 Check-out" if hab['is_checkout'] == 1 else "🟢 Stay-over"
+                            st.markdown(f"**{tipo_hab}**")
                         # Mostrar perfil si está disponible
                         if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
                             cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
@@ -1546,6 +1589,9 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                 with cols[0]:
                                     st.markdown(f"⏸️ **Hab {int(hab_id)}**")
                                     st.caption(f"Planta {int(row['planta'])}")
+                                    if 'is_checkout' in row:
+                                        tipo_hab = "🔴 Check-out" if row['is_checkout'] == 1 else "🟢 Stay-over"
+                                        st.caption(tipo_hab)
                                 with cols[1]:
                                     # Buscar la incidencia asociada
                                     inc = next((i for i in st.session_state.incidencias if i['habitacion'] == hab_id), None)
@@ -1607,6 +1653,11 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     tipo_emoji = "🟡"
                                 st.markdown(f"{tipo_emoji} **Hab {int(row['habitacion_id'])}**")
                                 st.caption(f"Planta {int(row['planta'])}")
+                                
+                                # Mostrar tipo (check-out / stay-over)
+                                if 'is_checkout' in row:
+                                    tipo_hab = "🔴 Check-out" if row['is_checkout'] == 1 else "🟢 Stay-over"
+                                    st.caption(tipo_hab)
                                 
                                 # Mostrar perfil si está disponible
                                 if st.session_state.cluster_habitaciones and row['habitacion_id'] in st.session_state.cluster_habitaciones:
