@@ -653,7 +653,7 @@ def mostrar_pantalla_inicio():
         return base64.b64encode(data).decode()
     
     # Cargar la imagen de fondo si existe
-    img_path = "background1.jpg"
+    img_path = "background3.jpg"
     if os.path.exists(img_path):
         img = get_img_as_base64(img_path)
         
@@ -694,7 +694,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <h2 style='text-align: center; color: white; margin-top: 5px; margin-bottom: 25px;'>
-            🏨 Check it Out! - App
+            🏨 Check it Out! - Hotel Clean App
         </h2>
         """,
         unsafe_allow_html=True
