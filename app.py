@@ -729,7 +729,15 @@ def mostrar_pantalla_inicio():
                 else:
                     st.markdown("❌ NLP")
     else:
-        # Mostrar la imagen de fondo clickeable
+        # Mostrar la imagen de fondo con un botón invisible superpuesto
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            # Botón grande y centrado para continuar
+            if st.button("👆 HAZ CLIC AQUÍ PARA COMENZAR", key="btn_continuar", use_container_width=True, type="primary"):
+                st.session_state.mostrar_carga_pms = True
+                st.rerun()
+        
+        # Mostrar la imagen como fondo
         st.markdown(
             f"""
             <style>
@@ -746,55 +754,31 @@ def mostrar_pantalla_inicio():
                 background-size: cover;
                 background-position: center;
                 background-repeat: no-repeat;
-                cursor: pointer;
-                z-index: 999;
+                z-index: -1;
             }}
-            .fullscreen-image:hover {{
-                opacity: 0.95;
-                transition: opacity 0.3s ease;
-            }}
-            .click-text {{
-                position: fixed;
-                bottom: 30px;
-                left: 50%;
-                transform: translateX(-50%);
-                color: white;
-                font-size: 1.5rem;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-                background: rgba(0,0,0,0.3);
-                padding: 10px 20px;
-                border-radius: 30px;
-                z-index: 1000;
-                pointer-events: none;
-                animation: pulse 2s infinite;
-            }}
-            @keyframes pulse {{
-                0% {{ opacity: 0.7; }}
-                50% {{ opacity: 1; }}
-                100% {{ opacity: 0.7; }}
+            .content-overlay {{
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 80vh;
             }}
             </style>
             
-            <div class="fullscreen-image" onclick="document.querySelector('.stApp').dispatchEvent(new Event('click_image'))"></div>
-            <div class="click-text">👆 Haz clic en cualquier lugar para continuar</div>
-            
-            <script>
-            document.addEventListener('click_image', function() {{
-                // Enviar evento a Streamlit
-                window.parent.postMessage({{
-                    type: 'streamlit:setComponentValue',
-                    value: true
-                }}, '*');
-            }});
-            </script>
+            <div class="fullscreen-image"></div>
+            <div class="content-overlay">
+                <h1 style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); text-align: center; margin-bottom: 30px;">
+                    Hotel Gran Bali
+                </h1>
+                <p style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); text-align: center; font-size: 1.2rem;">
+                    Sistema de Gestión IA de Limpieza
+                </p>
+            </div>
             """,
             unsafe_allow_html=True
         )
-        
-        # Detectar clic en la imagen (usando un botón invisible)
-        if st.button("", key="imagen_click", help="Haz clic en la imagen para continuar"):
-            st.session_state.mostrar_carga_pms = True
-            st.rerun()
 # =============================================================================
 
 # =============================================================================
