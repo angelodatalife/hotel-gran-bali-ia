@@ -614,55 +614,11 @@ def mostrar_pantalla_inicio():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # =========================================================================
-        # NUEVA POSICIÓN: Modelos cargados (ahora entre título y Cargar PMS)
-        # =========================================================================
-        # Sección de modelos cargados (centrada)
+        # Título "Cargar PMS" sin recuadro - AHORA EN BLANCO
         st.markdown(
             """
-            <h4 style='text-align: center; color: #666; margin-bottom: 20px;'>
-                🤖 Modelos cargados
-            </h4>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Mostrar modelos en fila (centrados) SIN FONDOS - SOLO TEXTO
-        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
-        
-        with col_mod1:
-            if modelos.get('ann') is not None:
-                st.markdown("✅ ANN")
-            else:
-                st.markdown("❌ ANN")
-        
-        with col_mod2:
-            if modelos.get('xgboost') is not None:
-                st.markdown("✅ XGBoost")
-            else:
-                st.markdown("❌ XGBoost")
-        
-        with col_mod3:
-            if modelos.get('kmeans') is not None:
-                st.markdown("✅ K-Means")
-            else:
-                st.markdown("❌ K-Means")
-        
-        with col_mod4:
-            if modelos.get('nlp') is not None:
-                st.markdown("✅ NLP")
-            else:
-                st.markdown("❌ NLP")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # =========================================================================
-        # Título "Cargar PMS aquí" con icono del hotel
-        # =========================================================================
-        st.markdown(
-            """
-            <h3 style='text-align: center; color: #333; margin-bottom: 20px;'>
-                🏨 Cargar PMS aquí ⬇️
+            <h3 style='text-align: center; color: white; margin-bottom: 20px;'>
+                Cargar PMS aquí ⬇️
             </h3>
             """,
             unsafe_allow_html=True
@@ -680,6 +636,171 @@ def mostrar_pantalla_inicio():
             procesar_archivo(archivo)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Sección de modelos cargados (centrada)
+        st.markdown(
+            """
+            <h4 style='text-align: center; color: white; margin-bottom: 20px;'>
+                🤖 Modelos cargados
+            </h4>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Mostrar modelos en fila (centrados) CON MAYOR CONTRASTE
+        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+        
+        with col_mod1:
+            if modelos.get('ann') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ ANN
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ ANN
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod2:
+            if modelos.get('xgboost') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ XGBoost
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ XGBoost
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod3:
+            if modelos.get('kmeans') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ K-Means
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ K-Means
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod4:
+            if modelos.get('nlp') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ NLP
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ NLP
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -1432,7 +1553,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                         st.markdown(f"**{inc['tipo']}**")
                                 with cols[2]:
                                     if 'tiempo_estimado_xgb' in row:
-                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")
+                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")  # 2 decimales
                                 with cols[3]:
                                     if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
@@ -1505,7 +1626,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                             
                             with cols[2]:
                                 if 'tiempo_estimado_xgb' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")  # 2 decimales
                             
                             with cols[3]:
                                 # Botón simple sin disabled
@@ -1557,7 +1678,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         
                         with cols[2]:
                             if 'tiempo_estimado_xgb' in row:
-                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")
+                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")  # 2 decimales
                         
                         with cols[3]:
                             if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
