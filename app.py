@@ -14,7 +14,7 @@ import re
 import time
 import os
 from sklearn.preprocessing import LabelEncoder
-import base64  # <--- AÑADIDO PARA LA IMAGEN DE FONDO
+import base64
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -69,52 +69,68 @@ TOTAL_HABITACIONES = 446
 
 if 'df_pms' not in st.session_state:
     st.session_state.df_pms = None
+    
 if 'incidencias' not in st.session_state:
     st.session_state.incidencias = []  # Falta suministros, Muy sucia, Ocupada, Otro
+    
 if 'mantenimiento' not in st.session_state:
     st.session_state.mantenimiento = []  # Averías técnicas
+    
 if 'opiniones' not in st.session_state:
     st.session_state.opiniones = []
+    
 if 'camarera_actual' not in st.session_state:
     st.session_state.camarera_actual = None
+    
 if 'cronometro_activo' not in st.session_state:
     st.session_state.cronometro_activo = False
+    
 if 'tiempo_inicio' not in st.session_state:
     st.session_state.tiempo_inicio = None
+    
 if 'habitacion_actual' not in st.session_state:
     st.session_state.habitacion_actual = None
+    
 if 'asignacion_por_camarera' not in st.session_state:
     st.session_state.asignacion_por_camarera = {}
+    
 if 'habitaciones_completadas' not in st.session_state:
     st.session_state.habitaciones_completadas = []
+    
 if 'habitaciones_standby' not in st.session_state:
     st.session_state.habitaciones_standby = []  # Lista de IDs en Stand By
+    
 if 'reporte_expander_open' not in st.session_state:
     st.session_state.reporte_expander_open = False
+    
 if 'selected_page' not in st.session_state:
     st.session_state.selected_page = "📊 Gerente"
+    
 if 'num_camareras' not in st.session_state:
     st.session_state.num_camareras = TOTAL_CAMARERAS
+    
 if 'archivo_cargado' not in st.session_state:
     st.session_state.archivo_cargado = False
+    
 if 'cluster_habitaciones' not in st.session_state:
     st.session_state.cluster_habitaciones = {}  # Para almacenar clusters K-Means
+    
 if 'label_encoders' not in st.session_state:
     st.session_state.label_encoders = {}  # Para codificar variables categóricas
+    
 if 'df_planta_stats' not in st.session_state:
     st.session_state.df_planta_stats = None
-# =============================================================================
-# NUEVO: Estado para controlar el mensaje de bienvenida
-# =============================================================================
+    
+# Estado para controlar el mensaje de bienvenida
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
-# =============================================================================
 
 # =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
 
 def limpiar_texto_opinion(texto):
+    """Limpia el texto de una opinión para procesamiento NLP"""
     if not isinstance(texto, str) or texto == "":
         return ""
     texto = texto.lower()
@@ -137,13 +153,32 @@ def procesar_opinion(texto):
         return "neutral"
 
 def formatear_tiempo(segundos):
+    """Formatea segundos a formato mm:ss"""
     minutos = int(segundos // 60)
     segs = int(segundos % 60)
     return f"{minutos}:{segs:02d}"
 
+def get_img_as_base64(file):
+    """Convierte una imagen a base64 para usarla como fondo"""
+    with open(file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def aplicar_fondo_morado():
+    """Aplica el fondo color #663399 a las vistas principales"""
+    fondo_morado = """
+    <style>
+    .stApp {
+        background-color: #663399;
+    }
+    </style>
+    """
+    st.markdown(fondo_morado, unsafe_allow_html=True)
+
 # =============================================================================
-# MODIFICADO: aplicar_kmeans ahora trabaja a nivel de habitación
+# APLICAR K-MEANS (a nivel de habitación)
 # =============================================================================
+
 def aplicar_kmeans(df):
     """Aplica K-Means para segmentar habitaciones por perfil de limpieza (a nivel de habitación)"""
     # Verificar si el modelo K-Means existe y es accesible
@@ -226,6 +261,9 @@ def aplicar_kmeans(df):
     except Exception as e:
         # Silenciosamente fallar sin mostrar warning
         return {}
+
+# =============================================================================
+# PREDECIR LATE CHECKOUT CON XGBOOST
 # =============================================================================
 
 def predecir_late_checkout_xgboost(df):
@@ -295,6 +333,10 @@ def predecir_late_checkout_xgboost(df):
         # Silenciosamente fallar sin mostrar warning
         return df
 
+# =============================================================================
+# ASIGNACIÓN POR BLOQUES ADYACENTES
+# =============================================================================
+
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     """Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES"""
     if df is None or len(df) == 0:
@@ -331,7 +373,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     carga_total = sum(carga_por_planta.values())
     carga_ideal_por_cam = carga_total / num_camareras
     
-    # 3. Aplicar ANN para priorizar urgentes (ya existente)
+    # 3. Aplicar ANN para priorizar urgentes
     if modelos.get('ann') is not None:
         try:
             # Extraer el modelo ANN
@@ -409,9 +451,7 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
         num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
         df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
-        # =========================================================================
-        # MODIFICADO: Ordenar por prioridad (check-out primero, luego late checkout y cluster)
-        # =========================================================================
+        # Ordenar por prioridad (check-out primero, luego late checkout y cluster)
         # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
         if 'is_checkout' in df_bloque.columns:
             df_bloque['prioridad_checkout'] = df_bloque['is_checkout']
@@ -429,7 +469,6 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
                 by=['prioridad_checkout', col_prioridad, 'habitacion_id'], 
                 ascending=[False, False, True]
             )
-        # =========================================================================
         
         if num_cam_bloque > 1:
             habs_por_cam = len(df_bloque) // num_cam_bloque
@@ -471,6 +510,10 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     
     return asignacion
 
+# =============================================================================
+# ACTUALIZAR DATASET
+# =============================================================================
+
 def actualizar_dataset(hab_id, campo, valor):
     """Actualiza una columna específica en el dataset para una habitación"""
     if st.session_state.df_pms is not None:
@@ -478,6 +521,10 @@ def actualizar_dataset(hab_id, campo, valor):
         if hab_id in df['habitacion_id'].values:
             df.loc[df['habitacion_id'] == hab_id, campo] = valor
             st.session_state.df_pms = df
+
+# =============================================================================
+# PROCESAR ARCHIVO CSV
+# =============================================================================
 
 def procesar_archivo(archivo):
     """Procesa el archivo cargado y actualiza el estado de la sesión"""
@@ -530,9 +577,7 @@ def procesar_archivo(archivo):
             except Exception as e:
                 pass  # Silenciosamente ignorar errores de ANN
         
-        # =============================================================================
-        # BLOQUE: APLICAR XGBOOST PARA PREDECIR TIEMPO_ESTIMADO (CON ESCALADOR GUARDADO)
-        # =============================================================================
+        # Aplicar XGBoost para predecir tiempo_estimado
         if modelos.get('xgboost') is not None:
             try:
                 # Extraer el modelo XGBoost del diccionario
@@ -540,7 +585,7 @@ def procesar_archivo(archivo):
                 
                 if isinstance(xgb_artifacts, dict):
                     xgb_model = xgb_artifacts.get('modelo')
-                    scaler_y = xgb_artifacts.get('scaler_y')  # <--- ESCALADOR GUARDADO
+                    scaler_y = xgb_artifacts.get('scaler_y')
                     encoders_xgb = xgb_artifacts.get('encoders', {})
                     feature_cols = xgb_artifacts.get('feature_cols', [])
                     cat_features = xgb_artifacts.get('cat_features', [])
@@ -581,7 +626,7 @@ def procesar_archivo(archivo):
                             # Predecir (valores escalados)
                             tiempo_predicho_escalado = xgb_model.predict(X_pred)
                             
-                            # APLICAR TRANSFORMACIÓN INVERSA CON EL ESCALADOR GUARDADO
+                            # Aplicar transformación inversa con el escalador guardado
                             tiempo_predicho_real = scaler_y.inverse_transform(
                                 tiempo_predicho_escalado.reshape(-1, 1)
                             ).ravel()
@@ -592,11 +637,8 @@ def procesar_archivo(archivo):
                             # Asignar al dataframe (primero en tiempo_estimado)
                             df['tiempo_estimado'] = np.round(tiempo_predicho_real, 1)
                             
-                            # =========================================================
-                            # NUEVO: Cambiar nombre de la columna a tiempo_estimado_xgb
-                            # =========================================================
+                            # Cambiar nombre de la columna a tiempo_estimado_xgb
                             df.rename(columns={'tiempo_estimado': 'tiempo_estimado_xgb'}, inplace=True)
-                            # =========================================================
                     else:
                         # Si falta el modelo o el escalador, usar valor por defecto
                         if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
@@ -614,9 +656,6 @@ def procesar_archivo(archivo):
             # Si no hay modelo XGBoost, usar valor por defecto
             if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
                 df['tiempo_estimado'] = 25.0
-        # =============================================================================
-        # FIN DEL BLOQUE CORREGIDO
-        # =============================================================================
         
         st.session_state.df_pms = df
         
@@ -626,11 +665,8 @@ def procesar_archivo(archivo):
         st.session_state.archivo_cargado = True
         st.session_state.selected_page = "📊 Gerente"
         
-        # =========================================================================
-        # NUEVO: Activar mensaje de bienvenida
-        # =========================================================================
+        # Activar mensaje de bienvenida
         st.session_state.mostrar_bienvenida = True
-        # =========================================================================
         
         st.success(f"✅ PMS cargado: {len(df)} habitaciones")
         time.sleep(1)
@@ -643,16 +679,7 @@ def procesar_archivo(archivo):
 def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
     
-    # =========================================================================
-    # NUEVO: Añadir imagen de fondo
-    # =========================================================================
-    @st.cache_data
-    def get_img_as_base64(file):
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    
-    # Cargar la imagen de fondo si existe
+    # Añadir imagen de fondo
     img_path = "background.jpg"
     if os.path.exists(img_path):
         img = get_img_as_base64(img_path)
@@ -688,9 +715,8 @@ def mostrar_pantalla_inicio():
         </style>
         """
         st.markdown(page_bg_img, unsafe_allow_html=True)
-    # =========================================================================
     
-    # Título principal (más pequeño y combinado)
+    # Título principal
     st.markdown(
         """
         <h2 style='text-align: center; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 3rem; color: white; margin-top: 5px; margin-top: 200px;'>
@@ -704,7 +730,7 @@ def mostrar_pantalla_inicio():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Título "Cargar PMS" sin recuadro
+        # Título "Cargar PMS"
         st.markdown(
             """
             <h3 style='text-align: center; color: #1E88E5; margin-top: 20px;'>
@@ -714,7 +740,7 @@ def mostrar_pantalla_inicio():
             unsafe_allow_html=True
         )
         
-        # File uploader de Streamlit (estilo drag and drop)
+        # File uploader de Streamlit
         archivo = st.file_uploader(
             "Arrastra tu archivo CSV aquí",
             type=['csv'],
@@ -726,7 +752,7 @@ def mostrar_pantalla_inicio():
             procesar_archivo(archivo)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
-            
+
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
 # =============================================================================
@@ -853,9 +879,7 @@ def mostrar_sidebar():
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
-    # =========================================================================
-    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
-    # =========================================================================
+    # Mostrar mensaje de bienvenida animado si está activado
     if st.session_state.mostrar_bienvenida:
         # Crear un placeholder para el mensaje
         welcome_placeholder = st.empty()
@@ -905,48 +929,16 @@ else:
         welcome_placeholder.empty()
         st.session_state.mostrar_bienvenida = False
         st.rerun()
-    # =========================================================================
     
-    # =========================================================================
-    # NUEVO: Aplicar fondo color #663399 a todas las vistas excepto la primera
-    # =========================================================================
-    # Aplicar fondo sólido color #663399
-    solid_bg = """
-    <style>
-    .stApp {
-        background-color: #663399;
-        background-image: none;
-    }
-    
-    /* Asegurar que el texto sea legible sobre el fondo morado */
-    h1, h2, h3, h4, h5, h6, p, span, div {
-        color: white !important;
-    }
-    
-    /* Mantener los botones y elementos interactivos legibles */
-    .stButton button, .stFileUploader {
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        color: black !important;
-    }
-    
-    /* Estilo para las tarjetas y contenedores */
-    .main > div {
-        background-color: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 1rem;
-        backdrop-filter: blur(2px);
-    }
-    </style>
-    """
-    st.markdown(solid_bg, unsafe_allow_html=True)
-    # =========================================================================
+    # Aplicar fondo morado a todas las vistas principales
+    aplicar_fondo_morado()
     
     # Mostrar sidebar y luego la vista correspondiente
     mostrar_sidebar()
     selected = st.session_state.selected_page
 
 # =============================================================================
-# VISTA GERENTE - CON 3 PESTAÑAS INTERNAS
+# VISTA GERENTE
 # =============================================================================
 
 if st.session_state.archivo_cargado and selected == "📊 Gerente":
@@ -956,7 +948,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     # Crear las 3 pestañas internas
     tab_dashboard, tab_estado, tab_carga = st.tabs(["📊 Dashboard Gerente", "🗺️ Estado de Habitaciones", "📊 Carga de trabajo por camarera"])
     
-    # ===== PESTAÑA 1: DASHBOARD GERENTE (CÍRCULOS Y CONTROLES) =====
+    # ===== PESTAÑA 1: DASHBOARD GERENTE =====
     with tab_dashboard:
         st.title("📊 Dashboard Gerente - Hotel Gran Bali")
         
@@ -966,7 +958,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         else:
             total_checkouts = 0
         
-        # Obtener número de checkouts estimados (late_checkout) - mantenido por compatibilidad
+        # Obtener número de checkouts estimados (late_checkout)
         if 'late_checkout_pred_combinado' in df.columns:
             late_checkouts = int(df['late_checkout_pred_combinado'].sum())
         elif 'late_checkout_pred' in df.columns:
@@ -993,7 +985,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     align-items: center;
                     justify-content: center;
                     margin: 0 auto;
-                    background: rgba(255,255,255,0.2);
+                    background: transparent;
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
                     <div style="font-size: 16px;">Ocupación</div>
@@ -1016,7 +1008,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     align-items: center;
                     justify-content: center;
                     margin: 0 auto;
-                    background: rgba(255,255,255,0.2);
+                    background: transparent;
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
                     <div style="font-size: 16px;">Habitaciones</div>
@@ -1038,7 +1030,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     align-items: center;
                     justify-content: center;
                     margin: 0 auto;
-                    background: rgba(255,255,255,0.2);
+                    background: transparent;
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{total_checkouts}</div>
                     <div style="font-size: 16px;">Check Out</div>
@@ -1047,13 +1039,13 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 unsafe_allow_html=True
             )
         
-        # Selector de número de camareras - CENTRADO Y MÁS CERCA
+        # Selector de número de camareras
         st.markdown("---")
         col_control1, col_control2, col_control3 = st.columns([1, 2, 1])
         with col_control2:
             st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>Ajustar personal</h3>", unsafe_allow_html=True)
             
-            # Contenedor centrado para los botones y el número con columnas EQUIDISTANTES
+            # Contenedor centrado para los botones y el número
             col_plus, col_num, col_minus = st.columns([1, 1, 1])
             
             with col_plus:
@@ -1083,11 +1075,11 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
         
         st.markdown("---")
     
-    # ===== PESTAÑA 2: ESTADO DE HABITACIONES (MAPA DE COLORES) =====
+    # ===== PESTAÑA 2: ESTADO DE HABITACIONES =====
     with tab_estado:
         st.title("🗺️ Estado de Habitaciones")
         
-        # Leyenda de colores (movida arriba, sin título)
+        # Leyenda de colores
         col_leg1, col_leg2, col_leg3, col_leg4, col_leg5 = st.columns(5)
         
         with col_leg1:
@@ -1161,23 +1153,23 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 for inc in st.session_state.incidencias:
                     if inc['habitacion'] == hab_id:
                         if inc['tipo'] == "Falta suministros":
-                            return "#FFA500"  # Naranja
+                            return "#FFA500"
                         elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
-                            return "#FF4444"  # Rojo
+                            return "#FF4444"
                 for mant in st.session_state.mantenimiento:
                     if mant['habitacion'] == hab_id:
-                        return "#808080"  # Gris
-                return "#4CAF50"  # Verde (completada sin problemas)
+                        return "#808080"
+                return "#4CAF50"
             elif hab_id in st.session_state.habitaciones_standby:
                 # Buscar el tipo de problema para el color correcto
                 for inc in st.session_state.incidencias:
                     if inc['habitacion'] == hab_id:
                         if inc['tipo'] == "Falta suministros":
-                            return "#FFA500"  # Naranja
+                            return "#FFA500"
                         elif inc['tipo'] in ["Muy sucia", "Ocupada"]:
-                            return "#FF4444"  # Rojo
-                return "#FFA500"  # Naranja por defecto para standby
-            return "transparent"  # Sin color (pendiente)
+                            return "#FF4444"
+                return "#FFA500"
+            return "transparent"
         
         # Crear pestañas por sector
         subtab1, subtab2, subtab3 = st.tabs(["🔵 Sector Bajo", "🟡 Sector Medio", "🔴 Sector Alto"])
@@ -1238,7 +1230,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                                 unsafe_allow_html=True
                             )
                         else:
-                            col.markdown("")  # Celda vacía
+                            col.markdown("")
     
     # ===== PESTAÑA 3: CARGA DE TRABAJO POR CAMARERA =====
     with tab_carga:
@@ -1324,9 +1316,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 df_clusters = df.copy()
                 df_clusters['cluster'] = df_clusters['habitacion_id'].map(st.session_state.cluster_habitaciones).fillna(0).astype(int)
                 
-                # =========================================================================
-                # MODIFICADO: Estadísticas de clusters basadas en datos reales, no en promedios de planta
-                # =========================================================================
                 # Calcular estadísticas reales por cluster
                 cluster_stats_real = df_clusters.groupby('cluster').agg({
                     'tiempo_estimado_xgb': ['mean', 'min', 'max', 'count'],
@@ -1342,7 +1331,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 # Mostrar estadísticas
                 st.dataframe(cluster_stats_real, use_container_width=True)
                 
-                # Explicación de perfiles (ahora basada en datos reales)
+                # Explicación de perfiles
                 st.caption("""
                 **Perfiles de limpieza (K-Means por habitación):**
                 Los clusters se calculan individualmente por habitación, no por planta.
@@ -1367,12 +1356,11 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                                 color_discrete_sequence=px.colors.qualitative.Set3
                             )
                             st.plotly_chart(fig, use_container_width=True)
-                # =========================================================================
         else:
             st.info("No hay datos de asignación disponibles")
 
 # =============================================================================
-# VISTA CAMARERA (solo si hay archivo cargado)
+# VISTA CAMARERA
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
@@ -1422,7 +1410,6 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                     plantas_unicas = sorted(df_asignadas['planta'].unique())
                     st.info(f"📌 Plantas: {min(plantas_unicas)}-{max(plantas_unicas)}")
             with col_info3:
-                # Botón sin parámetro disabled para evitar errores
                 if st.button("🔄 Cambiar usuario", key="btn_cambiar_usuario_principal"):
                     st.session_state.camarera_actual = None
                     st.session_state.habitaciones_completadas = []
@@ -1460,9 +1447,6 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         # Mostrar perfil si está disponible
                         if st.session_state.cluster_habitaciones and hab['habitacion_id'] in st.session_state.cluster_habitaciones:
                             cluster = st.session_state.cluster_habitaciones[hab['habitacion_id']]
-                            # =========================================================================
-                            # MODIFICADO: Descripción de perfil basada en cluster (ahora por habitación)
-                            # =========================================================================
                             if cluster == 0:
                                 st.markdown("**Perfil:** ⚡ Rápido")
                             elif cluster == 1:
@@ -1477,7 +1461,6 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                 st.markdown("**Perfil:** 🔬 Profundo")
                             else:
                                 st.markdown(f"**Perfil:** Cluster {cluster}")
-                            # =========================================================================
                     
                     with col_crono2:
                         tiempo_transcurrido = (datetime.now() - st.session_state.tiempo_inicio).seconds
@@ -1556,7 +1539,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                     
                                     st.warning(f"⏸️ Habitación {int(hab_id)} movida a Stand By")
                                     
-                                    # Reiniciar cronómetro (para nueva habitación)
+                                    # Reiniciar cronómetro
                                     st.session_state.cronometro_activo = False
                                     st.session_state.habitacion_actual = None
                                     st.session_state.reporte_expander_open = False
@@ -1597,7 +1580,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                                         st.markdown(f"**{inc['tipo']}**")
                                 with cols[2]:
                                     if 'tiempo_estimado_xgb' in row:
-                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")  # 2 decimales
+                                        st.markdown(f"⏱️ {row['tiempo_estimado_xgb']:.2f} min")
                                 with cols[3]:
                                     if st.button("✅ Resuelto", key=f"btn_standby_{hab_id}"):
                                         # Mover a completadas
@@ -1680,10 +1663,9 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                             
                             with cols[2]:
                                 if 'tiempo_estimado_xgb' in row:
-                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")  # 2 decimales
+                                    st.markdown(f"⏱️ **{row['tiempo_estimado_xgb']:.2f} min**")
                             
                             with cols[3]:
-                                # Botón simple sin disabled
                                 if not limpieza_en_curso:
                                     if st.button(
                                         f"▶️ Iniciar", 
@@ -1732,7 +1714,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         
                         with cols[2]:
                             if 'tiempo_estimado_xgb' in row:
-                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")  # 2 decimales
+                                st.markdown(f"~~{row['tiempo_estimado_xgb']:.2f} min~~")
                         
                         with cols[3]:
                             if 'tiempo_real' in row and pd.notna(row['tiempo_real']):
@@ -1743,7 +1725,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                         st.divider()
 
 # =============================================================================
-# VISTA CLIENTE (solo si hay archivo cargado)
+# VISTA CLIENTE
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "👤 Cliente":
@@ -1833,7 +1815,7 @@ elif st.session_state.archivo_cargado and selected == "👤 Cliente":
                 st.divider()
 
 # =============================================================================
-# VISTA INCIDENCIAS (solo si hay archivo cargado)
+# VISTA INCIDENCIAS
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "⚠️ Incidencias":
@@ -1859,7 +1841,7 @@ elif st.session_state.archivo_cargado and selected == "⚠️ Incidencias":
         st.info("✅ No hay incidencias operativas registradas")
 
 # =============================================================================
-# VISTA MANTENIMIENTO (solo si hay archivo cargado)
+# VISTA MANTENIMIENTO
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🔧 Mantenimiento":
@@ -1885,7 +1867,7 @@ elif st.session_state.archivo_cargado and selected == "🔧 Mantenimiento":
         st.info("✅ No hay averías de mantenimiento registradas")
 
 # =============================================================================
-# VISTA DATASET (solo si hay archivo cargado)
+# VISTA DATASET
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "📋 Dataset":
