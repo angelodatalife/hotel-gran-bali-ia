@@ -14,7 +14,7 @@ import re
 import time
 import os
 from sklearn.preprocessing import LabelEncoder
-import base64  # <--- AÑADIDO PARA LA IMAGEN DE FONDO
+import base64
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -644,50 +644,30 @@ def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
     
     # =========================================================================
-    # NUEVO: Añadir imagen de fondo
+    # MODIFICADO: Fondo de color #663399 para la pantalla de inicio
     # =========================================================================
-    @st.cache_data
-    def get_img_as_base64(file):
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
+    page_bg_color = """
+    <style>
+    .stApp {
+        background-color: #663399;
+    }
     
-    # Cargar la imagen de fondo si existe
-    img_path = "background.jpg"
-    if os.path.exists(img_path):
-        img = get_img_as_base64(img_path)
-        
-        page_bg_img = f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/jpeg;base64,{img}");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
-        
-        /* Hacer que el contenido sea legible sobre la imagen */
-        .main > div {{
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 2rem;
-            border-radius: 10px;
-            backdrop-filter: blur(3px);
-        }}
-        
-        /* Asegurar que el texto sea blanco y legible */
-        h2, h3, h4, p, span, div {{
-            color: white !important;
-        }}
-        
-        /* Mantener los botones y elementos interactivos con su estilo */
-        .stButton button, .stFileUploader {{
-            background-color: rgba(255, 255, 255, 0.9) !important;
-            color: black !important;
-        }}
-        </style>
-        """
-        st.markdown(page_bg_img, unsafe_allow_html=True)
+    /* Hacer que el contenido sea legible sobre el fondo */
+    .main > div {
+        background-color: rgba(0, 0, 0, 0.3);
+        padding: 2rem;
+        border-radius: 10px;
+        backdrop-filter: blur(3px);
+    }
+    
+    /* Mantener los botones y elementos interactivos con su estilo */
+    .stButton button, .stFileUploader {
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        color: black !important;
+    }
+    </style>
+    """
+    st.markdown(page_bg_color, unsafe_allow_html=True)
     # =========================================================================
     
     # Título principal (más pequeño y combinado)
@@ -726,33 +706,7 @@ def mostrar_pantalla_inicio():
             procesar_archivo(archivo)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
-
-# =============================================================================
-# NUEVA FUNCIÓN PARA APLICAR COLOR DE FONDO SEGÚN LA VISTA
-# =============================================================================
-def aplicar_color_fondo(color):
-    """Aplica un color de fondo sólido a la aplicación"""
-    bg_color_style = f"""
-    <style>
-    .stApp {{
-        background: {color};
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    
-    /* Mantener la legibilidad del texto */
-    .main > div {{
-        background-color: rgba(0, 0, 0, 0.3);
-        border-radius: 10px;
-        padding: 1rem;
-    }}
-    </style>
-    """
-    st.markdown(bg_color_style, unsafe_allow_html=True)
-# =============================================================================
-
+            
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
 # =============================================================================
@@ -880,8 +834,26 @@ if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
     # =========================================================================
-    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
+    # MODIFICADO: Fondo de color #663399 para todas las vistas
     # =========================================================================
+    page_bg_color = """
+    <style>
+    .stApp {
+        background-color: #663399;
+    }
+    
+    /* Hacer que el contenido sea legible sobre el fondo */
+    .main > div {
+        background-color: rgba(0, 0, 0, 0.3);
+        padding: 1rem;
+        border-radius: 10px;
+    }
+    </style>
+    """
+    st.markdown(page_bg_color, unsafe_allow_html=True)
+    # =========================================================================
+    
+    # Mostrar mensaje de bienvenida animado si está activado
     if st.session_state.mostrar_bienvenida:
         # Crear un placeholder para el mensaje
         welcome_placeholder = st.empty()
@@ -931,22 +903,6 @@ else:
         welcome_placeholder.empty()
         st.session_state.mostrar_bienvenida = False
         st.rerun()
-    # =========================================================================
-    
-    # =========================================================================
-    # NUEVO: APLICAR COLOR DE FONDO SEGÚN LA VISTA SELECCIONADA
-    # =========================================================================
-    if st.session_state.selected_page == "🧹 Camarera":
-        aplicar_color_fondo("#663399")  # Púrpura
-    elif st.session_state.selected_page == "⚠️ Incidencias":
-        aplicar_color_fondo("#8B0000")  # Rojo oscuro
-    elif st.session_state.selected_page == "🔧 Mantenimiento":
-        aplicar_color_fondo("#2F4F4F")  # Gris oscuro (pizarra)
-    elif st.session_state.selected_page == "👤 Cliente":
-        aplicar_color_fondo("#B8860B")  # Amarillo oscuro / dorado oscuro
-    elif st.session_state.selected_page == "📋 Dataset":
-        aplicar_color_fondo("#CD7F32")  # Dorado oscuro / bronce
-    # =========================================================================
     
     # Mostrar sidebar y luego la vista correspondiente
     mostrar_sidebar()
