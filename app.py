@@ -696,10 +696,10 @@ def mostrar_pantalla_inicio():
         
         /* Hacer que el contenido sea legible sobre la imagen */
         .main > div {{
-            background-color: transparent;
+            background-color: rgba(0, 0, 0, 0.6);
             padding: 2rem;
             border-radius: 10px;
-            backdrop-filter: blur(0px);
+            backdrop-filter: blur(3px);
         }}
         
         /* Asegurar que el texto sea blanco y legible */
