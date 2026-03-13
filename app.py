@@ -1364,7 +1364,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
-    st.title("🧹 App Camarera")
+    st.title("🧹 App Camarer@")
     
     if not st.session_state.asignacion_por_camarera:
         st.warning("⚠️ No hay asignación disponible")
