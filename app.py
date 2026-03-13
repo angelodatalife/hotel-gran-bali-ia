@@ -27,24 +27,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ===========================================
-# ESTILOS GLOBALES
-# ===========================================
-
-st.markdown("""
-<style>
-/* Cambiar todos los títulos a color negro */
-h1, h2, h3 {
-    color: #000000 !important;
-}
-
-/* Opcional: mantener los títulos de la pantalla de inicio en blanco */
-.inicio h1, .inicio h2, .inicio h3 {
-    color: white !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 # =============================================================================
 # CARGA DE MODELOS
 # =============================================================================
