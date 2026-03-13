@@ -762,7 +762,7 @@ def mostrar_sidebar():
     with st.sidebar:
         st.markdown(
             """
-            <h1 style='font-size: 2.5rem; margin-bottom: 0; color: white;'>
+            <h1 style='font-size: 3rem; margin-bottom: 0; color: white;'>
                 🏨 Hotel Bali
             </h1>
             """,
