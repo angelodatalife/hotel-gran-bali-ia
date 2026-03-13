@@ -693,7 +693,7 @@ def mostrar_pantalla_inicio():
     # Título principal (más pequeño y combinado)
     st.markdown(
         """
-        <h2 style='text-align: center; color: white; margin-top: 5px; margin-top: 25px;'>
+        <h2 style='text-align: center; color: white; margin-top: 5px; margin-top: 200px;'>
             Check it Out! - Hotel Clean App
         </h2>
         """,
