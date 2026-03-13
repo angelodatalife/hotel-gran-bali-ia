@@ -126,6 +126,12 @@ if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
 
 # =============================================================================
+# NUEVO: Contador para check-outs completados
+# =============================================================================
+if 'checkouts_completados' not in st.session_state:
+    st.session_state.checkouts_completados = 0
+
+# =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
 
@@ -657,6 +663,9 @@ def procesar_archivo(archivo):
             if 'tiempo_estimado' not in df.columns or df['tiempo_estimado'].isnull().all():
                 df['tiempo_estimado'] = 25.0
         
+        # Reiniciar contador de check-outs al cargar nuevo archivo
+        st.session_state.checkouts_completados = 0
+        
         st.session_state.df_pms = df
         
         with st.spinner("Calculando asignación por bloques adyacentes..."):
@@ -866,7 +875,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida']:
+                        'mostrar_bienvenida', 'checkouts_completados']:  # <--- AÑADIDO
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1027,6 +1036,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
             )
         
         with col_metric3:
+            checkouts_hechos = st.session_state.checkouts_completados
             st.markdown(
                 f"""
                 <div style="
@@ -1041,7 +1051,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     margin: 0 auto;
                     background: transparent;
                 ">
-                    <div style="font-size: 32px; font-weight: bold;">{total_checkouts}</div>
+                    <div style="font-size: 32px; font-weight: bold;">{checkouts_hechos}/{total_checkouts}</div>
                     <div style="font-size: 16px;">Check Out</div>
                     <div style="font-size: 16px;">hechos</div>
                 </div>
@@ -1488,6 +1498,10 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
                             # Actualizar dataset con tiempo_real
                             hab_id = hab['habitacion_id']
                             actualizar_dataset(hab_id, 'tiempo_real', round(tiempo_real, 1))
+                            
+                            # Verificar si la habitación completada es un check-out
+                            if hab.get('is_checkout', 0) == 1:
+                                st.session_state.checkouts_completados += 1  # Incrementar contador de check-outs
                             
                             st.session_state.habitaciones_completadas.append(hab_id)
                             
