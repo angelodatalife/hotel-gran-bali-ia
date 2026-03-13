@@ -1019,7 +1019,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
                     <div style="font-size: 16px;">Habitaciones</div>
-                    <div style="font-size: 16px;">Hechas</div>
+                    <div style="font-size: 16px;">hechas</div>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1042,6 +1042,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{total_checkouts}</div>
                     <div style="font-size: 16px;">Check Out</div>
+                    <div style="font-size: 16px;">hechos</div>
                 </div>
                 """,
                 unsafe_allow_html=True
