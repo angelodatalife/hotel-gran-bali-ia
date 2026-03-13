@@ -996,6 +996,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
                     <div style="font-size: 16px;">Ocupación</div>
+                    <div style="font-size: 16px;">hoy</div>
                 </div>
                 """,
                 unsafe_allow_html=True
