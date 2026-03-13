@@ -760,7 +760,7 @@ def mostrar_pantalla_inicio():
 def mostrar_sidebar():
     """Muestra el sidebar con la navegación (solo después de cargar archivo)"""
     with st.sidebar:
-        st.title("🏨 Hotel Gran Bali")
+        st.title("🏨 Hotel Bali")
         st.markdown("---")
         
         # Menú principal con contadores alineados
@@ -950,7 +950,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
     
     # ===== PESTAÑA 1: DASHBOARD GERENTE =====
     with tab_dashboard:
-        st.title("📊 Dashboard Gerente - Hotel Gran Bali")
+        st.title("📊 Dashboard Gerente")
         
         # Obtener número de checkouts (is_checkout)
         if 'is_checkout' in df.columns:
@@ -1364,7 +1364,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
-    st.title("🧹 App Camarera - Hotel Gran Bali")
+    st.title("🧹 App Camarera")
     
     if not st.session_state.asignacion_por_camarera:
         st.warning("⚠️ No hay asignación disponible")
