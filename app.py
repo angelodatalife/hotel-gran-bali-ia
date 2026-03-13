@@ -696,10 +696,10 @@ def mostrar_pantalla_inicio():
         
         /* Hacer que el contenido sea legible sobre la imagen */
         .main > div {{
-            background-color: rgba(0, 0, 0, 0.6);
+            background-color: transparent;
             padding: 2rem;
             border-radius: 10px;
-            backdrop-filter: blur(3px);
+            backdrop-filter: blur(0px);
         }}
         
         /* Asegurar que el texto sea blanco y legible */
@@ -1364,7 +1364,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
-    st.title("🧹 App Camarer@")
+    st.title("🧹 App Camarera")
     
     if not st.session_state.asignacion_por_camarera:
         st.warning("⚠️ No hay asignación disponible")
