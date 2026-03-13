@@ -171,27 +171,6 @@ def aplicar_fondo_morado():
     .stApp {
         background-color: #663399;
     }
-    
-    /* Cambiar color del título del sidebar a negro */
-    .css-1d391kg, .css-1v3fvcr, .sidebar-content h1, 
-    .sidebar-content h2, .sidebar-content h3, 
-    .sidebar-content .stMarkdown, .sidebar-content p {
-        color: black !important;
-    }
-    
-    /* Cambiar color de "Menú Principal" a negro */
-    .sidebar-content .stMarkdown:contains("Menú Principal"),
-    .sidebar-content div:contains("Menú Principal") {
-        color: black !important;
-    }
-    
-    /* Cambiar color de los botones del menú a negro */
-    .stButton button {
-        color: black !important;
-    }
-    </style>
-    """
-    st.markdown(fondo_morado, unsafe_allow_html=True)
 
 # =============================================================================
 # APLICAR K-MEANS (a nivel de habitación)
