@@ -728,26 +728,25 @@ def mostrar_pantalla_inicio():
         st.markdown("<br><br>", unsafe_allow_html=True)
 
 # =============================================================================
-# FUNCIÓN PARA APLICAR FONDOS DE COLOR SEGÚN LA VISTA
+# NUEVA FUNCIÓN PARA APLICAR COLOR DE FONDO SEGÚN LA VISTA
 # =============================================================================
-def aplicar_fondo_color(color):
-    """Aplica un fondo de color sólido a la aplicación"""
+def aplicar_color_fondo(color):
+    """Aplica un color de fondo sólido a la aplicación"""
     bg_color_style = f"""
     <style>
     .stApp {{
-        background-color: {color};
+        background: {color};
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
     
-    /* Mantener el contenido legible */
+    /* Mantener la legibilidad del texto */
     .main > div {{
-        background-color: rgba(255, 255, 255, 0.1);
+        background-color: rgba(0, 0, 0, 0.3);
         border-radius: 10px;
         padding: 1rem;
-        backdrop-filter: blur(2px);
     }}
     </style>
     """
@@ -881,23 +880,8 @@ if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
     # =========================================================================
-    # APLICAR FONDO DE COLOR SEGÚN LA VISTA SELECCIONADA
+    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
     # =========================================================================
-    if st.session_state.selected_page == "📊 Gerente":
-        aplicar_fondo_color("#CC5500")  # Naranja oscuro
-    elif st.session_state.selected_page == "🧹 Camarera":
-        aplicar_fondo_color("#663399")  # Púrpura (Rebecca Purple)
-    elif st.session_state.selected_page == "⚠️ Incidencias":
-        aplicar_fondo_color("#B8860B")  # Amarillo oscuro (DarkGoldenrod)
-    elif st.session_state.selected_page == "🔧 Mantenimiento":
-        aplicar_fondo_color("#505050")  # Gris oscuro
-    elif st.session_state.selected_page == "👤 Cliente":
-        aplicar_fondo_color("#8B0000")  # Rojo oscuro (DarkRed)
-    elif st.session_state.selected_page == "📋 Dataset":
-        aplicar_fondo_color("#2E4057")  # Azul grisáceo oscuro (para Dataset)
-    # =========================================================================
-    
-    # Mostrar mensaje de bienvenida animado si está activado
     if st.session_state.mostrar_bienvenida:
         # Crear un placeholder para el mensaje
         welcome_placeholder = st.empty()
@@ -947,6 +931,21 @@ else:
         welcome_placeholder.empty()
         st.session_state.mostrar_bienvenida = False
         st.rerun()
+    # =========================================================================
+    
+    # =========================================================================
+    # NUEVO: APLICAR COLOR DE FONDO SEGÚN LA VISTA SELECCIONADA
+    # =========================================================================
+    if st.session_state.selected_page == "🧹 Camarera":
+        aplicar_color_fondo("#663399")  # Púrpura
+    elif st.session_state.selected_page == "⚠️ Incidencias":
+        aplicar_color_fondo("#8B0000")  # Rojo oscuro
+    elif st.session_state.selected_page == "🔧 Mantenimiento":
+        aplicar_color_fondo("#2F4F4F")  # Gris oscuro (pizarra)
+    elif st.session_state.selected_page == "👤 Cliente":
+        aplicar_color_fondo("#B8860B")  # Amarillo oscuro / dorado oscuro
+    elif st.session_state.selected_page == "📋 Dataset":
+        aplicar_color_fondo("#CD7F32")  # Dorado oscuro / bronce
     # =========================================================================
     
     # Mostrar sidebar y luego la vista correspondiente
