@@ -726,7 +726,34 @@ def mostrar_pantalla_inicio():
             procesar_archivo(archivo)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
-            
+
+# =============================================================================
+# FUNCIÓN PARA APLICAR FONDOS DE COLOR SEGÚN LA VISTA
+# =============================================================================
+def aplicar_fondo_color(color):
+    """Aplica un fondo de color sólido a la aplicación"""
+    bg_color_style = f"""
+    <style>
+    .stApp {{
+        background-color: {color};
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    
+    /* Mantener el contenido legible */
+    .main > div {{
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 1rem;
+        backdrop-filter: blur(2px);
+    }}
+    </style>
+    """
+    st.markdown(bg_color_style, unsafe_allow_html=True)
+# =============================================================================
+
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
 # =============================================================================
@@ -854,8 +881,23 @@ if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
     # =========================================================================
-    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
+    # APLICAR FONDO DE COLOR SEGÚN LA VISTA SELECCIONADA
     # =========================================================================
+    if st.session_state.selected_page == "📊 Gerente":
+        aplicar_fondo_color("#CC5500")  # Naranja oscuro
+    elif st.session_state.selected_page == "🧹 Camarera":
+        aplicar_fondo_color("#663399")  # Púrpura (Rebecca Purple)
+    elif st.session_state.selected_page == "⚠️ Incidencias":
+        aplicar_fondo_color("#B8860B")  # Amarillo oscuro (DarkGoldenrod)
+    elif st.session_state.selected_page == "🔧 Mantenimiento":
+        aplicar_fondo_color("#505050")  # Gris oscuro
+    elif st.session_state.selected_page == "👤 Cliente":
+        aplicar_fondo_color("#8B0000")  # Rojo oscuro (DarkRed)
+    elif st.session_state.selected_page == "📋 Dataset":
+        aplicar_fondo_color("#2E4057")  # Azul grisáceo oscuro (para Dataset)
+    # =========================================================================
+    
+    # Mostrar mensaje de bienvenida animado si está activado
     if st.session_state.mostrar_bienvenida:
         # Crear un placeholder para el mensaje
         welcome_placeholder = st.empty()
@@ -1342,21 +1384,6 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
-    
-    # =========================================================================
-    # NUEVO: Fondo verde pastel para la vista Camarera
-    # =========================================================================
-    green_bg = """
-    <style>
-    .stApp {
-        background-color: #663399;  /* Verde pastel */
-        background-image: none;
-    }
-    </style>
-    """
-    st.markdown(green_bg, unsafe_allow_html=True)
-    # =========================================================================
-    
     st.title("🧹 App Camarera - Hotel Gran Bali")
     
     if not st.session_state.asignacion_por_camarera:
