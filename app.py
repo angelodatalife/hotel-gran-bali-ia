@@ -846,41 +846,6 @@ def mostrar_sidebar():
             st.rerun()
 
 # =============================================================================
-# FUNCIÓN PARA APLICAR FONDO SEGÚN LA VISTA
-# =============================================================================
-@st.cache_data
-def get_img_as_base64(file):
-    with open(file, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
-def aplicar_fondo_vista(imagen):
-    """Aplica una imagen de fondo específica para la vista actual"""
-    if os.path.exists(imagen):
-        img = get_img_as_base64(imagen)
-        
-        bg_style = f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{img}");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
-        
-        /* Hacer que el contenido sea legible sobre la imagen */
-        .main > div {{
-            background-color: rgba(0, 0, 0, 0.5);
-            border-radius: 10px;
-            padding: 1rem;
-        }}
-        </style>
-        """
-        st.markdown(bg_style, unsafe_allow_html=True)
-# =============================================================================
-
-# =============================================================================
 # LÓGICA PRINCIPAL DE NAVEGACIÓN
 # =============================================================================
 
@@ -888,13 +853,6 @@ def aplicar_fondo_vista(imagen):
 if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
-    # =========================================================================
-    # APLICAR FONDO SEGÚN LA VISTA SELECCIONADA (PRUEBA CON CAMARERA)
-    # =========================================================================
-    if st.session_state.selected_page == "🧹 Camarera":
-        aplicar_fondo_vista("camarera.png")
-    # =========================================================================
-    
     # =========================================================================
     # NUEVO: Mostrar mensaje de bienvenida animado si está activado
     # =========================================================================
@@ -1384,6 +1342,21 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
 # =============================================================================
 
 elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
+    
+    # =========================================================================
+    # NUEVO: Fondo verde pastel para la vista Camarera
+    # =========================================================================
+    green_bg = """
+    <style>
+    .stApp {
+        background-color: #e8f5e9;  /* Verde pastel */
+        background-image: none;
+    }
+    </style>
+    """
+    st.markdown(green_bg, unsafe_allow_html=True)
+    # =========================================================================
+    
     st.title("🧹 App Camarera - Hotel Gran Bali")
     
     if not st.session_state.asignacion_por_camarera:
