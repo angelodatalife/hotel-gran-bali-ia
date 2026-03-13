@@ -1349,7 +1349,7 @@ elif st.session_state.archivo_cargado and selected == "🧹 Camarera":
     green_bg = """
     <style>
     .stApp {
-        background-color: #7d9ec0;  /* Verde pastel */
+        background-color: #1E88E5;  /* Verde pastel */
         background-image: none;
     }
     </style>
