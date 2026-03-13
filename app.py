@@ -17,6 +17,11 @@ from sklearn.preprocessing import LabelEncoder
 import base64
 
 # =============================================================================
+# NUEVO: Importar transformers para NLP
+# =============================================================================
+from transformers import pipeline
+
+# =============================================================================
 # CONFIGURACIÓN INICIAL
 # =============================================================================
 
@@ -39,7 +44,7 @@ def cargar_modelos():
         'ann': 'ann.pkl',
         'xgboost': 'xgboost.pkl',
         'kmeans': 'kmeans.pkl',
-        'nlp': 'nlp.pkl'
+        'nlp': 'nlp.pkl'  # Mantenemos la entrada pero ya no se usará
     }
     
     for nombre, archivo in archivos_modelos.items():
@@ -55,6 +60,28 @@ def cargar_modelos():
     return modelos
 
 modelos = cargar_modelos()
+
+# =============================================================================
+# NUEVO: Cargar modelo NLP de Hugging Face
+# =============================================================================
+@st.cache_resource
+def cargar_modelo_nlp_hf():
+    """Carga el pipeline de análisis de sentimiento de Hugging Face"""
+    with st.spinner("Cargando modelo de análisis de sentimiento... (solo la primera vez)"):
+        try:
+            nlp_pipeline = pipeline(
+                "sentiment-analysis",
+                model="pysentimiento/robertuito-sentiment-analysis",
+                tokenizer="pysentimiento/robertuito-sentiment-analysis"
+            )
+            return nlp_pipeline
+        except Exception as e:
+            st.warning(f"⚠️ No se pudo cargar el modelo NLP de Hugging Face: {e}")
+            return None
+
+# Cargar el pipeline NLP y guardarlo en el estado de sesión
+if 'nlp_pipeline_hf' not in st.session_state:
+    st.session_state.nlp_pipeline_hf = cargar_modelo_nlp_hf()
 
 # =============================================================================
 # CONSTANTES
@@ -125,9 +152,7 @@ if 'df_planta_stats' not in st.session_state:
 if 'mostrar_bienvenida' not in st.session_state:
     st.session_state.mostrar_bienvenida = False
 
-# =============================================================================
-# NUEVO: Contador para check-outs completados
-# =============================================================================
+# Contador para check-outs completados
 if 'checkouts_completados' not in st.session_state:
     st.session_state.checkouts_completados = 0
 
@@ -135,28 +160,33 @@ if 'checkouts_completados' not in st.session_state:
 # FUNCIONES AUXILIARES
 # =============================================================================
 
-def limpiar_texto_opinion(texto):
-    """Limpia el texto de una opinión para procesamiento NLP"""
-    if not isinstance(texto, str) or texto == "":
-        return ""
-    texto = texto.lower()
-    texto = re.sub(r'[^\w\s]', '', texto)
-    texto = re.sub(r'\d+', '', texto)
-    texto = re.sub(r'\s+', ' ', texto).strip()
-    return texto
-
+# =============================================================================
+# MODIFICADO: Nueva función procesar_opinion usando Hugging Face
+# =============================================================================
 def procesar_opinion(texto):
-    """Procesa una opinión y devuelve el sentimiento usando el modelo NLP"""
+    """Procesa una opinión y devuelve el sentimiento usando el modelo de Hugging Face"""
     if not texto or texto == "":
         return ""
-    if modelos.get('nlp') is None:
+    
+    pipeline_nlp = st.session_state.nlp_pipeline_hf
+    if pipeline_nlp is None:
         return "neutral"
-    pipeline = modelos['nlp']
-    texto_limpio = limpiar_texto_opinion(texto)
+    
     try:
-        return pipeline.predict([texto_limpio])[0]
-    except:
+        # El pipeline devuelve una lista, cogemos el primer (y único) resultado
+        resultado = pipeline_nlp(texto)[0]
+        etiqueta = resultado['label']
+        # Mapeamos las etiquetas del modelo a las que usa tu app
+        mapa_sentimientos = {
+            'POS': 'positivo',
+            'NEG': 'negativo',
+            'NEU': 'neutral'
+        }
+        return mapa_sentimientos.get(etiqueta, 'neutral')
+    except Exception as e:
+        st.warning(f"Error analizando sentimiento: {e}")
         return "neutral"
+# =============================================================================
 
 def formatear_tiempo(segundos):
     """Formatea segundos a formato mm:ss"""
@@ -728,9 +758,14 @@ def mostrar_pantalla_inicio():
     # Título principal
     st.markdown(
         """
-        <h2 style='text-align: center; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 3rem; color: white; margin-top: 5px; margin-top: 200px;'>
-            Check it Out! - Hotel Clean App (AI)
-        </h2>
+        <div style='text-align: center; margin-top: 200px;'>
+            <h2 style='text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 3rem; color: white; margin: 0;'>
+                Check it Out!
+            </h2>
+            <h2 style='text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 3rem; color: white; margin: 0;'>
+                Hotel Clean App (AI)
+            </h2>
+        </div>
         """,
         unsafe_allow_html=True
     )
@@ -860,7 +895,7 @@ def mostrar_sidebar():
             'ANN': modelos.get('ann') is not None,
             'XGBoost': modelos.get('xgboost') is not None,
             'K-Means': modelos.get('kmeans') is not None,
-            'NLP': modelos.get('nlp') is not None
+            'NLP': st.session_state.nlp_pipeline_hf is not  None  # Actualizado para mostrar el estado del modelo HF
         }
         for nombre, cargado in modelos_lista.items():
             if cargado:
@@ -875,7 +910,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'checkouts_completados']:  # <--- AÑADIDO
+                        'mostrar_bienvenida', 'checkouts_completados']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
@@ -1792,7 +1827,7 @@ elif st.session_state.archivo_cargado and selected == "👤 Cliente":
             elif not opinion_texto:
                 st.error("❌ Por favor, escribe tu opinión")
             else:
-                # Procesar la opinión con NLP
+                # Procesar la opinión con NLP (nueva versión con Hugging Face)
                 sentimiento = procesar_opinion(opinion_texto)
                 
                 # Guardar en el dataset
