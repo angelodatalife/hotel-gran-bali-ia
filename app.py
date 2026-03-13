@@ -694,8 +694,7 @@ def mostrar_pantalla_inicio():
     st.markdown(
         """
         <h2 style='text-align: center; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 3rem; color: white; margin-top: 5px; margin-top: 200px;'>
-            Check it Out! <br>
-            Hotel Clean App (IA)
+            Check it Out! - Hotel Clean App (IA)
         </h2>
         """,
         unsafe_allow_html=True
