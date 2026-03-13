@@ -171,6 +171,9 @@ def aplicar_fondo_morado():
     .stApp {
         background-color: #663399;
     }
+    </style>
+    """
+    st.markdown(fondo_morado, unsafe_allow_html=True)
 
 # =============================================================================
 # APLICAR K-MEANS (a nivel de habitación)
@@ -791,13 +794,13 @@ def mostrar_sidebar():
         with col3:
             st.markdown("")
         
-        #  con contador
+        # Mantenimiento con contador
         col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
-            _selected = st.button("🔧 ", key="btn_", use_container_width=True)
+            mantenimiento_selected = st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True)
         with col2:
-            if st.session_state.:
-                st.markdown(f"**({len(st.session_state.)})**")
+            if st.session_state.mantenimiento:
+                st.markdown(f"**({len(st.session_state.mantenimiento)})**")
         with col3:
             st.markdown("")
         
@@ -826,7 +829,7 @@ def mostrar_sidebar():
             st.session_state.selected_page = "🧹 Camarera"
         elif incidencias_selected:
             st.session_state.selected_page = "⚠️ Incidencias"
-        elif _selected:
+        elif mantenimiento_selected:
             st.session_state.selected_page = "🔧 Mantenimiento"
         elif cliente_selected:
             st.session_state.selected_page = "👤 Cliente"
