@@ -171,6 +171,24 @@ def aplicar_fondo_morado():
     .stApp {
         background-color: #663399;
     }
+    
+    /* Cambiar color del título del sidebar a negro */
+    .css-1d391kg, .css-1v3fvcr, .sidebar-content h1, 
+    .sidebar-content h2, .sidebar-content h3, 
+    .sidebar-content .stMarkdown, .sidebar-content p {
+        color: black !important;
+    }
+    
+    /* Cambiar color de "Menú Principal" a negro */
+    .sidebar-content .stMarkdown:contains("Menú Principal"),
+    .sidebar-content div:contains("Menú Principal") {
+        color: black !important;
+    }
+    
+    /* Cambiar color de los botones del menú a negro */
+    .stButton button {
+        color: black !important;
+    }
     </style>
     """
     st.markdown(fondo_morado, unsafe_allow_html=True)
@@ -794,13 +812,13 @@ def mostrar_sidebar():
         with col3:
             st.markdown("")
         
-        # Mantenimiento con contador
+        #  con contador
         col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
-            mantenimiento_selected = st.button("🔧 Mantenimiento", key="btn_mantenimiento", use_container_width=True)
+            _selected = st.button("🔧 ", key="btn_", use_container_width=True)
         with col2:
-            if st.session_state.mantenimiento:
-                st.markdown(f"**({len(st.session_state.mantenimiento)})**")
+            if st.session_state.:
+                st.markdown(f"**({len(st.session_state.)})**")
         with col3:
             st.markdown("")
         
@@ -829,7 +847,7 @@ def mostrar_sidebar():
             st.session_state.selected_page = "🧹 Camarera"
         elif incidencias_selected:
             st.session_state.selected_page = "⚠️ Incidencias"
-        elif mantenimiento_selected:
+        elif _selected:
             st.session_state.selected_page = "🔧 Mantenimiento"
         elif cliente_selected:
             st.session_state.selected_page = "👤 Cliente"
