@@ -760,7 +760,14 @@ def mostrar_pantalla_inicio():
 def mostrar_sidebar():
     """Muestra el sidebar con la navegación (solo después de cargar archivo)"""
     with st.sidebar:
-        st.title("🏨 Hotel Bali")
+        st.markdown(
+            """
+            <h1 style='font-size: 2.5rem; margin-bottom: 0; color: white;'>
+                🏨 Hotel Bali
+            </h1>
+            """,
+            unsafe_allow_html=True
+        )
         st.markdown("---")
         
         # Menú principal con contadores alineados
