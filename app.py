@@ -653,7 +653,7 @@ def mostrar_pantalla_inicio():
         return base64.b64encode(data).decode()
     
     # Cargar la imagen de fondo si existe
-    img_path = "background1.png"
+    img_path = "background1.jpg"
     if os.path.exists(img_path):
         img = get_img_as_base64(img_path)
         
