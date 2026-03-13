@@ -14,7 +14,7 @@ import re
 import time
 import os
 from sklearn.preprocessing import LabelEncoder
-import base64
+import base64  # <--- AÑADIDO PARA LA IMAGEN DE FONDO
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -644,30 +644,50 @@ def mostrar_pantalla_inicio():
     """Muestra la pantalla de inicio centralizada"""
     
     # =========================================================================
-    # MODIFICADO: Fondo de color #663399 para la pantalla de inicio
+    # NUEVO: Añadir imagen de fondo
     # =========================================================================
-    page_bg_color = """
-    <style>
-    .stApp {
-        background-color: #663399;
-    }
+    @st.cache_data
+    def get_img_as_base64(file):
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
     
-    /* Hacer que el contenido sea legible sobre el fondo */
-    .main > div {
-        background-color: rgba(0, 0, 0, 0.3);
-        padding: 2rem;
-        border-radius: 10px;
-        backdrop-filter: blur(3px);
-    }
-    
-    /* Mantener los botones y elementos interactivos con su estilo */
-    .stButton button, .stFileUploader {
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        color: black !important;
-    }
-    </style>
-    """
-    st.markdown(page_bg_color, unsafe_allow_html=True)
+    # Cargar la imagen de fondo si existe
+    img_path = "background.jpg"
+    if os.path.exists(img_path):
+        img = get_img_as_base64(img_path)
+        
+        page_bg_img = f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/jpeg;base64,{img}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        
+        /* Hacer que el contenido sea legible sobre la imagen */
+        .main > div {{
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 2rem;
+            border-radius: 10px;
+            backdrop-filter: blur(3px);
+        }}
+        
+        /* Asegurar que el texto sea blanco y legible */
+        h2, h3, h4, p, span, div {{
+            color: white !important;
+        }}
+        
+        /* Mantener los botones y elementos interactivos con su estilo */
+        .stButton button, .stFileUploader {{
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            color: black !important;
+        }}
+        </style>
+        """
+        st.markdown(page_bg_img, unsafe_allow_html=True)
     # =========================================================================
     
     # Título principal (más pequeño y combinado)
@@ -834,26 +854,8 @@ if not st.session_state.archivo_cargado or st.session_state.df_pms is None:
     mostrar_pantalla_inicio()
 else:
     # =========================================================================
-    # MODIFICADO: Fondo de color #663399 para todas las vistas
+    # NUEVO: Mostrar mensaje de bienvenida animado si está activado
     # =========================================================================
-    page_bg_color = """
-    <style>
-    .stApp {
-        background-color: #663399;
-    }
-    
-    /* Hacer que el contenido sea legible sobre el fondo */
-    .main > div {
-        background-color: rgba(0, 0, 0, 0.3);
-        padding: 1rem;
-        border-radius: 10px;
-    }
-    </style>
-    """
-    st.markdown(page_bg_color, unsafe_allow_html=True)
-    # =========================================================================
-    
-    # Mostrar mensaje de bienvenida animado si está activado
     if st.session_state.mostrar_bienvenida:
         # Crear un placeholder para el mensaje
         welcome_placeholder = st.empty()
@@ -903,6 +905,41 @@ else:
         welcome_placeholder.empty()
         st.session_state.mostrar_bienvenida = False
         st.rerun()
+    # =========================================================================
+    
+    # =========================================================================
+    # NUEVO: Aplicar fondo color #663399 a todas las vistas excepto la primera
+    # =========================================================================
+    # Aplicar fondo sólido color #663399
+    solid_bg = """
+    <style>
+    .stApp {
+        background-color: #663399;
+        background-image: none;
+    }
+    
+    /* Asegurar que el texto sea legible sobre el fondo morado */
+    h1, h2, h3, h4, h5, h6, p, span, div {
+        color: white !important;
+    }
+    
+    /* Mantener los botones y elementos interactivos legibles */
+    .stButton button, .stFileUploader {
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        color: black !important;
+    }
+    
+    /* Estilo para las tarjetas y contenedores */
+    .main > div {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 1rem;
+        backdrop-filter: blur(2px);
+    }
+    </style>
+    """
+    st.markdown(solid_bg, unsafe_allow_html=True)
+    # =========================================================================
     
     # Mostrar sidebar y luego la vista correspondiente
     mostrar_sidebar()
@@ -956,7 +993,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     align-items: center;
                     justify-content: center;
                     margin: 0 auto;
-                    background: transparent;
+                    background: rgba(255,255,255,0.2);
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{ocupacion:.1f}%</div>
                     <div style="font-size: 16px;">Ocupación</div>
@@ -979,7 +1016,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     align-items: center;
                     justify-content: center;
                     margin: 0 auto;
-                    background: transparent;
+                    background: rgba(255,255,255,0.2);
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{habitaciones_hechas}/{len(df)}</div>
                     <div style="font-size: 16px;">Habitaciones</div>
@@ -1001,7 +1038,7 @@ if st.session_state.archivo_cargado and selected == "📊 Gerente":
                     align-items: center;
                     justify-content: center;
                     margin: 0 auto;
-                    background: transparent;
+                    background: rgba(255,255,255,0.2);
                 ">
                     <div style="font-size: 32px; font-weight: bold;">{total_checkouts}</div>
                     <div style="font-size: 16px;">Check Out</div>
