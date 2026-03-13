@@ -685,64 +685,29 @@ def mostrar_pantalla_inicio():
             background-color: rgba(255, 255, 255, 0.9) !important;
             color: black !important;
         }}
-        
-        /* Estructura de página para centrar título y poner carga abajo */
-        .main {{
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }}
-        
-        .title-container {{
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }}
-        
-        .upload-container {{
-            position: fixed;
-            bottom: 30px;
-            left: 0;
-            right: 0;
-            margin: auto;
-            width: 100%;
-            max-width: 600px;
-            text-align: center;
-        }}
         </style>
         """
         st.markdown(page_bg_img, unsafe_allow_html=True)
     # =========================================================================
     
-    # Título principal en el centro
+    # Título principal (más pequeño y combinado)
     st.markdown(
         """
-        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100%; position: fixed; top: 0; left: 0; z-index: 999; pointer-events: none;">
-            <h2 style="color: white; margin: 0; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 6rem; text-align: center;">
-                <span style="color: #FFD700;">Check it Out!</span><br>
-                <span style="font-size: 0.5em; display: block; color: white;">Hotel Clean App (IA)</span>
-            </h2>
-        </div>
+        <h2 style='text-align: center; color: white; margin-top: 5px; margin-bottom: 25px;'>
+            Check it Out! - Hotel Clean App
+        </h2>
         """,
         unsafe_allow_html=True
     )
     
-    # Contenedor inferior para la carga de archivos
-    st.markdown(
-        """
-        <div class="upload-container">
-        """,
-        unsafe_allow_html=True
-    )
-    
+    # Contenedor central para la carga de archivos
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
         # Título "Cargar PMS" sin recuadro
         st.markdown(
             """
-            <h3 style='text-align: center; color: #1E88E5; margin-top: 400px;'>
+            <h3 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
                 Cargar PMS ⬇️
             </h3>
             """,
@@ -759,8 +724,173 @@ def mostrar_pantalla_inicio():
         
         if archivo is not None:
             procesar_archivo(archivo)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Sección de modelos cargados (centrada)
+        st.markdown(
+            """
+            <h4 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
+                🤖 Modelos Inteligentes Cargados...
+            </h4>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Mostrar modelos en fila (centrados) CON MAYOR CONTRASTE
+        col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
+        
+        with col_mod1:
+            if modelos.get('ann') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ ANN
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ ANN
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod2:
+            if modelos.get('xgboost') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ XGBoost
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ XGBoost
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod3:
+            if modelos.get('kmeans') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ K-Means
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ K-Means
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with col_mod4:
+            if modelos.get('nlp') is not None:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #2a6d2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #4CAF50;
+                    ">
+                        ✅ NLP
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        background-color: #6d2a2a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        text-align: center;
+                        font-weight: bold;
+                        color: white;
+                        font-size: 18px;
+                        border: 1px solid #FF4444;
+                    ">
+                        ❌ NLP
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
@@ -909,10 +1039,10 @@ else:
                 ">
                     <div>
                         <h1 style="color: #FFD700; font-size: 3.5rem; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                            ...
+                            🏨 ¡Bienvenid@ al Sistema Inteligente de Limpieza!
                         </h1>
                         <h2 style="color: white; font-size: 2.5rem; animation: pulse 2s infinite;">
-                            Cargando modelos inteligentes...
+                            Hotel Gran Bali
                         </h2>
                     </div>
                 </div>
