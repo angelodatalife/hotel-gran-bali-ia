@@ -695,7 +695,7 @@ def mostrar_pantalla_inicio():
         """
         <h2 style='text-align: center; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); font-size: 3rem; color: white; margin-top: 5px; margin-top: 200px;'>
             Check it Out! <br>
-            <span style="font-size: 0.5em; display: block;">Hotel Clean App (IA)</span>
+            <span style="font-size: 0.5em; >Hotel Clean App (IA)</span>
         </h2>
         """,
         unsafe_allow_html=True
