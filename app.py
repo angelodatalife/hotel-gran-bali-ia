@@ -763,7 +763,7 @@ def mostrar_sidebar():
         st.markdown(
             """
             <h1 style='font-size: 4rem; margin-bottom: 0; color: white;'>
-                🏨 Hotel Bali
+                Hotel Bali
             </h1>
             """,
             unsafe_allow_html=True
