@@ -726,17 +726,7 @@ def mostrar_pantalla_inicio():
             procesar_archivo(archivo)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        # Sección de modelos cargados (centrada)
-        st.markdown(
-            """
-            <h4 style='text-align: center; color: #1E88E5; margin-bottom: 20px;'>
-                🤖 Modelos Inteligentes Cargados...
-            </h4>
-            """,
-            unsafe_allow_html=True
-        )
-        
+            
         # Mostrar modelos en fila (centrados) CON MAYOR CONTRASTE
         col_mod1, col_mod2, col_mod3, col_mod4 = st.columns(4)
         
