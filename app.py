@@ -87,7 +87,7 @@ if 'nlp_pipeline_hf' not in st.session_state:
 # CONSTANTES
 # =============================================================================
 
-TOTAL_CAMARERAS = 35
+TOTAL_CAMARERAS = 23
 TOTAL_HABITACIONES = 458
 
 # =============================================================================
