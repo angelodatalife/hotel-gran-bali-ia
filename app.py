@@ -88,7 +88,7 @@ if 'nlp_pipeline_hf' not in st.session_state:
 # =============================================================================
 
 TOTAL_CAMARERAS = 35
-TOTAL_HABITACIONES = 458
+TOTAL_HABITACIONES = 446
 
 # =============================================================================
 # INICIALIZACIÓN DEL ESTADO DE SESIÓN
@@ -370,15 +370,11 @@ def predecir_late_checkout_xgboost(df):
         return df
 
 # =============================================================================
-# MEJORADO: ASIGNACIÓN EQUITATIVA POR BLOQUES ADYACENTES
+# ASIGNACIÓN POR BLOQUES ADYACENTES
 # =============================================================================
 
 def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
-    """
-    Asigna habitaciones de forma EQUITATIVA por bloques adyacentes
-    Garantiza que todas las camareras tengan el mismo número de habitaciones
-    (diferencia máxima de 1 habitación)
-    """
+    """Asigna habitaciones por BLOQUES DE PLANTAS ADYACENTES"""
     if df is None or len(df) == 0:
         return {}
     
@@ -398,7 +394,22 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     if cluster_dict:
         df_asignar['cluster'] = df_asignar['habitacion_id'].map(cluster_dict).fillna(0).astype(int)
     
-    # Aplicar ANN para priorizar urgentes
+    plantas_totales = sorted(df_asignar['planta'].unique())
+    
+    # 1. Calcular carga por planta
+    carga_por_planta = {}
+    for planta in plantas_totales:
+        df_planta = df_asignar[df_asignar['planta'] == planta]
+        if 'tiempo_estimado_xgb' in df_planta.columns:
+            carga_por_planta[planta] = df_planta['tiempo_estimado_xgb'].sum()
+        else:
+            carga_por_planta[planta] = len(df_planta) * 25
+    
+    # 2. Calcular carga total y carga ideal por camarera
+    carga_total = sum(carga_por_planta.values())
+    carga_ideal_por_cam = carga_total / num_camareras
+    
+    # 3. Aplicar ANN para priorizar urgentes
     if modelos.get('ann') is not None:
         try:
             # Extraer el modelo ANN
@@ -442,47 +453,96 @@ def asignar_por_bloques_adyacentes(df, num_camareras=TOTAL_CAMARERAS):
     else:
         col_prioridad = 'late_checkout_pred'
     
-    # ===== NUEVO ALGORITMO EQUITATIVO =====
-    total_habitaciones = len(df_asignar)
+    # 4. Crear BLOQUES DE PLANTAS ADYACENTES
+    bloques = []
+    bloque_actual = []
+    carga_acumulada = 0
     
-    # Cálculo de reparto perfecto
-    hab_por_cam = total_habitaciones // num_camareras
-    resto = total_habitaciones % num_camareras
+    for planta in plantas_totales:
+        bloque_actual.append(planta)
+        carga_acumulada += carga_por_planta[planta]
+        
+        if carga_acumulada >= carga_ideal_por_cam * 0.8:
+            bloques.append({
+                'plantas': bloque_actual.copy(),
+                'carga': carga_acumulada
+            })
+            bloque_actual = []
+            carga_acumulada = 0
     
-    # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
-    if 'is_checkout' in df_asignar.columns:
-        df_asignar['prioridad_checkout'] = df_asignar['is_checkout']
-    else:
-        df_asignar['prioridad_checkout'] = 0
+    if bloque_actual:
+        bloques.append({
+            'plantas': bloque_actual,
+            'carga': carga_acumulada
+        })
     
-    # Ordenar por prioridad: primero check-out, luego por late checkout, luego por cluster, luego por planta
-    if 'cluster' in df_asignar.columns:
-        df_asignar = df_asignar.sort_values(
-            by=['prioridad_checkout', col_prioridad, 'cluster', 'planta', 'habitacion_id'], 
-            ascending=[False, False, False, True, True]
-        )
-    else:
-        df_asignar = df_asignar.sort_values(
-            by=['prioridad_checkout', col_prioridad, 'planta', 'habitacion_id'], 
-            ascending=[False, False, True, True]
-        )
-    
-    # Asignación round-robin equitativa
+    # 5. Asignar camareras a bloques
     asignacion = {}
+    cam_idx = 1
     
-    # Distribuir las habitaciones una a una (round-robin)
-    for i, (_, row) in enumerate(df_asignar.iterrows()):
-        cam_idx = i % num_camareras
-        cam_name = f"Camarera {cam_idx + 1:02d}"
+    for bloque in bloques:
+        plantas_bloque = bloque['plantas']
+        carga_bloque = bloque['carga']
         
-        if cam_name not in asignacion:
-            asignacion[cam_name] = []
+        num_cam_bloque = max(1, round(carga_bloque / carga_ideal_por_cam))
+        df_bloque = df_asignar[df_asignar['planta'].isin(plantas_bloque)].copy()
         
-        asignacion[cam_name].append(row)
+        # Ordenar por prioridad (check-out primero, luego late checkout y cluster)
+        # Crear columna de prioridad: check-out (1) va antes que stay-over (0)
+        if 'is_checkout' in df_bloque.columns:
+            df_bloque['prioridad_checkout'] = df_bloque['is_checkout']
+        else:
+            df_bloque['prioridad_checkout'] = 0
+        
+        # Ordenar: primero check-out, luego por late checkout, luego por cluster, luego por habitación
+        if 'cluster' in df_bloque.columns:
+            df_bloque = df_bloque.sort_values(
+                by=['prioridad_checkout', col_prioridad, 'cluster', 'habitacion_id'], 
+                ascending=[False, False, False, True]
+            )
+        else:
+            df_bloque = df_bloque.sort_values(
+                by=['prioridad_checkout', col_prioridad, 'habitacion_id'], 
+                ascending=[False, False, True]
+            )
+        
+        if num_cam_bloque > 1:
+            habs_por_cam = len(df_bloque) // num_cam_bloque
+            resto = len(df_bloque) % num_cam_bloque
+            inicio = 0
+            for i in range(num_cam_bloque):
+                if cam_idx > num_camareras:
+                    break
+                fin = inicio + habs_por_cam + (1 if i < resto else 0)
+                df_cam = df_bloque.iloc[inicio:fin].copy()
+                if len(df_cam) > 0:
+                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam
+                inicio = fin
+                cam_idx += 1
+        else:
+            if cam_idx <= num_camareras:
+                asignacion[f"Camarera {cam_idx:02d}"] = df_bloque
+                cam_idx += 1
     
-    # Convertir listas a DataFrames
-    for cam_name in asignacion:
-        asignacion[cam_name] = pd.DataFrame(asignacion[cam_name])
+    # Asegurar que tenemos exactamente el número de camareras solicitado
+    while cam_idx <= num_camareras and len(asignacion) < num_camareras:
+        if asignacion:
+            # Tomar la camarera con más habitaciones y dividir
+            cam_max = max(asignacion.items(), key=lambda x: len(x[1]))
+            df_max = cam_max[1]
+            if len(df_max) > 1:
+                mitad = len(df_max) // 2
+                df_cam1 = df_max.iloc[:mitad].copy()
+                df_cam2 = df_max.iloc[mitad:].copy()
+                
+                asignacion[cam_max[0]] = df_cam1
+                if len(df_cam2) > 0:
+                    asignacion[f"Camarera {cam_idx:02d}"] = df_cam2
+                    cam_idx += 1
+            else:
+                break
+        else:
+            break
     
     return asignacion
 
