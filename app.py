@@ -88,7 +88,7 @@ if 'nlp_pipeline_hf' not in st.session_state:
 # =============================================================================
 
 TOTAL_CAMARERAS = 35
-TOTAL_HABITACIONES = 446
+TOTAL_HABITACIONES = 458
 
 # =============================================================================
 # INICIALIZACIÓN DEL ESTADO DE SESIÓN
