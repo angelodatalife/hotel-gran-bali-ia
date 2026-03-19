@@ -1,4 +1,4 @@
-Hotel Gran Bali - IA para Limpieza Hotelera
+Hotel Gran Bali - NeuralClean
 
 Sistema inteligente de gestión de limpieza que optimiza la asignación de tareas según perfil de cliente.
 
