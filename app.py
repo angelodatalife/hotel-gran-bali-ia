@@ -910,7 +910,7 @@ def mostrar_pantalla_inicio():
             z-index: 999;
         }}
         .demo-button-container .stButton button {{
-            background-color: #FFA500;
+            background-color: #663399ff;
             color: white;
             font-weight: bold;
             border-radius: 8px;
