@@ -156,13 +156,165 @@ if 'mostrar_bienvenida' not in st.session_state:
 if 'checkouts_completados' not in st.session_state:
     st.session_state.checkouts_completados = 0
 
+# Estado para modo demo
+if 'demo_mode' not in st.session_state:
+    st.session_state.demo_mode = False
+
 # =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
 
 # =============================================================================
-# MODIFICADO: Nueva función procesar_opinion usando Hugging Face
+# NUEVO: Generar datos de demostración
 # =============================================================================
+def generar_datos_demo():
+    """Genera datos de demostración coherentes y equilibrados"""
+    np.random.seed(42)
+    
+    # Crear lista de habitaciones (458 habitaciones)
+    habitaciones_ids = []
+    for planta in range(2, 53):
+        if 2 <= planta <= 15:
+            num_habs = 18
+            sector = 'bajo'
+            tipo_base = 'doble_estandar' if planta <= 15 else 'doble_superior'
+        elif 16 <= planta <= 30:
+            num_habs = 10
+            sector = 'medio'
+            tipo_base = 'doble_superior'
+        elif 31 <= planta <= 42:
+            num_habs = 3
+            sector = 'alto'
+            tipo_base = 'suite'
+        else:
+            num_habs = 2
+            sector = 'alto'
+            tipo_base = 'suite'
+        
+        for i in range(1, num_habs + 1):
+            hab_id = planta * 100 + i
+            habitaciones_ids.append(hab_id)
+    
+    # Seleccionar aleatoriamente ocupación (~70-80%)
+    num_ocupadas = int(len(habitaciones_ids) * np.random.uniform(0.70, 0.80))
+    habitaciones_ocupadas = np.random.choice(habitaciones_ids, num_ocupadas, replace=False)
+    
+    # Generar datos
+    datos = []
+    for hab_id in habitaciones_ocupadas:
+        planta = hab_id // 100
+        # Determinar sector
+        if planta <= 15:
+            sector = 'bajo'
+            tipo = 'doble_estandar' if (hab_id % 100) > 14 else 'doble_superior'
+        elif planta <= 30:
+            sector = 'medio'
+            tipo = 'doble_superior'
+        else:
+            sector = 'alto'
+            tipo = 'suite'
+        
+        # Datos realistas
+        is_checkout = np.random.choice([0, 1], p=[0.6, 0.4])
+        noches_estancia = np.random.choice([1, 2, 3, 4, 5, 7], p=[0.3, 0.25, 0.15, 0.1, 0.1, 0.1])
+        nacionalidad = np.random.choice(['España', 'Reino Unido', 'Alemania', 'Francia', 'USA'], p=[0.3, 0.25, 0.2, 0.15, 0.1])
+        num_huespedes = np.random.choice([1, 2, 3, 4], p=[0.2, 0.5, 0.2, 0.1] if tipo == 'suite' else [0.3, 0.6, 0.1, 0])
+        tiene_ninos = np.random.random() < 0.3 if num_huespedes >= 3 else np.random.random() < 0.1
+        
+        # Tiempos según tipo y check-out
+        if is_checkout == 1:
+            if tipo == 'suite':
+                tiempo_estimado = np.random.normal(60, 8)
+            elif tipo == 'doble_superior':
+                tiempo_estimado = np.random.normal(50, 7)
+            else:
+                tiempo_estimado = np.random.normal(40, 6)
+        else:
+            if tipo == 'suite':
+                tiempo_estimado = np.random.normal(30, 5)
+            elif tipo == 'doble_superior':
+                tiempo_estimado = np.random.normal(25, 4)
+            else:
+                tiempo_estimado = np.random.normal(20, 3)
+        
+        tiempo_estimado = round(max(15, tiempo_estimado), 1)
+        
+        # Late checkout (solo si es check-out)
+        if is_checkout == 1:
+            # Probabilidad según segmento
+            if tiene_ninos or num_huespedes >= 3:
+                prob_late = 0.6
+            elif nacionalidad == 'USA':
+                prob_late = 0.5
+            elif noches_estancia >= 4:
+                prob_late = 0.4
+            else:
+                prob_late = 0.2
+            late_checkout = 1 if np.random.random() < prob_late else 0
+        else:
+            late_checkout = 0
+        
+        # Día de semana (simular lunes=0, domingo=6)
+        dia_semana = np.random.choice([0, 1, 2, 3, 4, 5, 6], p=[0.15, 0.15, 0.15, 0.15, 0.15, 0.1, 0.15])
+        mes = np.random.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], p=[0.08, 0.08, 0.08, 0.08, 0.08, 0.09, 0.1, 0.1, 0.08, 0.08, 0.08, 0.07])
+        
+        datos.append({
+            'fecha': datetime.now().strftime('%Y-%m-%d'),
+            'habitacion_id': hab_id,
+            'planta': planta,
+            'sector': sector,
+            'tipo_habitacion': tipo,
+            'noches_estancia': noches_estancia,
+            'nacionalidad': nacionalidad,
+            'num_huespedes': num_huespedes,
+            'tiene_ninos': int(tiene_ninos),
+            'segmento': 'Familia' if tiene_ninos else ('Pareja' if num_huespedes == 2 else 'Turismo'),
+            'dia_semana': dia_semana,
+            'mes': mes,
+            'is_checkout': is_checkout,
+            'late_checkout': late_checkout,
+            'tiempo_estimado': tiempo_estimado,
+            'tiempo_real': None,
+            'incidencia_camarera': None,
+            'opinion_cliente': None,
+            'sentimiento_nlp': None
+        })
+    
+    df = pd.DataFrame(datos)
+    
+    # Renombrar columna tiempo_estimado para consistencia
+    df.rename(columns={'tiempo_estimado': 'tiempo_estimado_xgb'}, inplace=True)
+    
+    # Añadir predicciones demo
+    if modelos.get('ann') is not None:
+        df['prob_late'] = df['late_checkout'].apply(lambda x: 0.7 if x == 1 else 0.3)
+        df['late_checkout_pred'] = df['late_checkout']
+    
+    return df
+
+# =============================================================================
+# NUEVO: Cargar datos demo
+# =============================================================================
+def cargar_demo():
+    """Carga los datos de demostración"""
+    with st.spinner("Cargando datos de demostración..."):
+        df_demo = generar_datos_demo()
+        
+        st.session_state.df_pms = df_demo
+        
+        with st.spinner("Calculando asignación por bloques adyacentes..."):
+            st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(df_demo, st.session_state.num_camareras)
+        
+        st.session_state.archivo_cargado = True
+        st.session_state.demo_mode = True
+        st.session_state.selected_page = "📊 Gerente"
+        st.session_state.mostrar_bienvenida = True
+        
+        st.success(f"✅ Modo Demo activado: {len(df_demo)} habitaciones ocupadas")
+        time.sleep(1)
+        st.rerun()
+# =============================================================================
+
 def procesar_opinion(texto):
     """Procesa una opinión y devuelve el sentimiento usando el modelo de Hugging Face"""
     if not texto or texto == "":
@@ -173,10 +325,8 @@ def procesar_opinion(texto):
         return "neutral"
     
     try:
-        # El pipeline devuelve una lista, cogemos el primer (y único) resultado
         resultado = pipeline_nlp(texto)[0]
         etiqueta = resultado['label']
-        # Mapeamos las etiquetas del modelo a las que usa tu app
         mapa_sentimientos = {
             'POS': 'positivo',
             'NEG': 'negativo',
@@ -186,7 +336,6 @@ def procesar_opinion(texto):
     except Exception as e:
         st.warning(f"Error analizando sentimiento: {e}")
         return "neutral"
-# =============================================================================
 
 def formatear_tiempo(segundos):
     """Formatea segundos a formato mm:ss"""
@@ -702,6 +851,7 @@ def procesar_archivo(archivo):
             st.session_state.asignacion_por_camarera = asignar_por_bloques_adyacentes(df, st.session_state.num_camareras)
         
         st.session_state.archivo_cargado = True
+        st.session_state.demo_mode = False
         st.session_state.selected_page = "📊 Gerente"
         
         # Activar mensaje de bienvenida
@@ -790,6 +940,38 @@ def mostrar_pantalla_inicio():
         if archivo is not None:
             procesar_archivo(archivo)
         
+        # =========================================================================
+        # NUEVO: Botón DEMO (rectangular)
+        # =========================================================================
+        st.markdown(
+            """
+            <style>
+            div.stButton > button:first-child {
+                background-color: #FFA500;
+                color: white;
+                font-weight: bold;
+                border-radius: 8px;
+                border: none;
+                padding: 0.75rem 2rem;
+                font-size: 1.2rem;
+                transition: all 0.3s ease;
+            }
+            div.stButton > button:first-child:hover {
+                background-color: #FF8C00;
+                transform: scale(1.02);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # Botón Demo
+        col_demo1, col_demo2, col_demo3 = st.columns([1, 2, 1])
+        with col_demo2:
+            if st.button("🚀 PROBAR DEMO", key="btn_demo", use_container_width=True):
+                cargar_demo()
+        
         st.markdown("<br><br>", unsafe_allow_html=True)
 
 # =============================================================================
@@ -807,6 +989,12 @@ def mostrar_sidebar():
             """,
             unsafe_allow_html=True
         )
+        st.markdown("---")
+        
+        # Mostrar indicador de modo demo
+        if st.session_state.demo_mode:
+            st.info("🎮 **Modo Demo Activo**")
+        
         st.markdown("---")
         
         # Menú principal con contadores alineados
@@ -890,7 +1078,7 @@ def mostrar_sidebar():
             'ANN': modelos.get('ann') is not None,
             'XGBoost': modelos.get('xgboost') is not None,
             'K-Means': modelos.get('kmeans') is not None,
-            'NLP': st.session_state.nlp_pipeline_hf is not  None  # Actualizado para mostrar el estado del modelo HF
+            'NLP': st.session_state.nlp_pipeline_hf is not  None
         }
         for nombre, cargado in modelos_lista.items():
             if cargado:
@@ -905,7 +1093,7 @@ def mostrar_sidebar():
                         'cronometro_activo', 'tiempo_inicio', 'habitacion_actual',
                         'asignacion_por_camarera', 'habitaciones_completadas', 'habitaciones_standby', 
                         'archivo_cargado', 'cluster_habitaciones', 'label_encoders', 'df_planta_stats',
-                        'mostrar_bienvenida', 'checkouts_completados']:
+                        'mostrar_bienvenida', 'checkouts_completados', 'demo_mode']:
                 if key in st.session_state:
                     if key in ['incidencias', 'mantenimiento', 'opiniones', 'habitaciones_completadas', 
                                'habitaciones_standby']:
