@@ -901,8 +901,32 @@ def mostrar_pantalla_inicio():
             background-color: rgba(255, 255, 255, 0.9) !important;
             color: black !important;
         }}
+        
+        /* Estilo para el botón Demo en esquina inferior izquierda */
+        .demo-button-container {{
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 999;
+        }}
+        .demo-button-container .stButton button {{
+            background-color: #FFA500;
+            color: white;
+            font-weight: bold;
+            border-radius: 8px;
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }}
+        .demo-button-container .stButton button:hover {{
+            background-color: #FF8C00;
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }}
         </style>
-        """
+        """,
         st.markdown(page_bg_img, unsafe_allow_html=True)
     
     # Título principal
@@ -940,39 +964,16 @@ def mostrar_pantalla_inicio():
         if archivo is not None:
             procesar_archivo(archivo)
         
-        # =========================================================================
-        # NUEVO: Botón DEMO (rectangular)
-        # =========================================================================
-        st.markdown(
-            """
-            <style>
-            div.stButton > button:first-child {
-                background-color: #FFA500;
-                color: white;
-                font-weight: bold;
-                border-radius: 8px;
-                border: none;
-                padding: 0.75rem 2rem;
-                font-size: 1.2rem;
-                transition: all 0.3s ease;
-            }
-            div.stButton > button:first-child:hover {
-                background-color: #FF8C00;
-                transform: scale(1.02);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Botón Demo
-        col_demo1, col_demo2, col_demo3 = st.columns([1, 2, 1])
-        with col_demo2:
-            if st.button("🚀 PROBAR DEMO", key="btn_demo", use_container_width=True):
-                cargar_demo()
-        
         st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # =========================================================================
+    # NUEVO: Botón DEMO en esquina inferior izquierda
+    # =========================================================================
+    with st.container():
+        st.markdown('<div class="demo-button-container">', unsafe_allow_html=True)
+        if st.button("🚀 PROBAR DEMO", key="btn_demo", use_container_width=False):
+            cargar_demo()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================================================================
 # SIDEBAR - NAVEGACIÓN (solo visible después de cargar archivo)
