@@ -883,7 +883,6 @@ def mostrar_pantalla_inicio():
             background-attachment: fixed;
         }}
         
-        /* Hacer que el contenido sea legible sobre la imagen */
         .main > div {{
             background-color: rgba(0, 0, 0, 0.6);
             padding: 2rem;
@@ -891,18 +890,15 @@ def mostrar_pantalla_inicio():
             backdrop-filter: blur(3px);
         }}
         
-        /* Asegurar que el texto sea blanco y legible */
         h2, h3, h4, p, span, div {{
             color: white !important;
         }}
         
-        /* Mantener los botones y elementos interactivos con su estilo */
         .stButton button, .stFileUploader {{
             background-color: rgba(255, 255, 255, 0.9) !important;
             color: black !important;
         }}
         
-        /* Estilo para el botón Demo en esquina inferior izquierda */
         .demo-button-container {{
             position: fixed;
             bottom: 20px;
@@ -926,7 +922,7 @@ def mostrar_pantalla_inicio():
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }}
         </style>
-        """,
+        """
         st.markdown(page_bg_img, unsafe_allow_html=True)
     
     # Título principal
@@ -966,9 +962,7 @@ def mostrar_pantalla_inicio():
         
         st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # =========================================================================
-    # NUEVO: Botón DEMO en esquina inferior izquierda
-    # =========================================================================
+    # Botón DEMO en esquina inferior izquierda
     with st.container():
         st.markdown('<div class="demo-button-container">', unsafe_allow_html=True)
         if st.button("🚀 PROBAR DEMO", key="btn_demo", use_container_width=False):
