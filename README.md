@@ -2,7 +2,7 @@
 
 Sistema inteligente de gestión de limpieza que optimiza la asignación de tareas según perfil de cliente.
 
-📊 Descripción
+##📊 Descripción
 
   458 habitaciones, 51 plantas, 3 sectores
   
