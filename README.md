@@ -14,6 +14,8 @@ Segmentación de habitaciones en 6 perfiles (K-Means)
 
 Análisis de sentimiento de opiniones (NLP), mediante Transformer de HF
 
+Deployment en Streamlit
+
 ## 📁 Modelos
 
 ann.pkl - Red neuronal para late checkout
