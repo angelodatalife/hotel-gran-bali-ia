@@ -1,4 +1,4 @@
-## **BI Sistem - NeuralClean**
+## **BI System - NeuralClean**
 
 Sistema inteligente de gestión de limpieza que optimiza la asignación de tareas según perfil de cliente.
 
