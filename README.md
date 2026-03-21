@@ -4,33 +4,33 @@ Sistema inteligente de gestión de limpieza que optimiza la asignación de tarea
 
 ## 📊 Descripción
 
-  458 habitaciones, 51 plantas, 3 sectores
-  
-  Predicción de late checkout (ANN)
-  
-  Estimación de tiempo de limpieza (XGBoost, MAE ~3.2 min)
-  
-  Segmentación de habitaciones en 6 perfiles (K-Means)
-  
-  Análisis de sentimiento de opiniones (NLP), mediante Transformer de HF
+458 habitaciones, 51 plantas, 3 sectores
 
-📁 Modelos
+Predicción de late checkout (ANN)
 
-  ann.pkl - Red neuronal para late checkout
-  
-  xgboost.pkl - Regresor de tiempos
-  
-  kmeans.pkl - Clustering de perfiles
+Estimación de tiempo de limpieza (XGBoost, MAE ~3.2 min)
 
-🎯 Resultados
+Segmentación de habitaciones en 6 perfiles (K-Means)
 
-  Carga equilibrada entre camareras
-  
-  Tiempos de limpieza precisos (±3 min)
-  
-  6 perfiles de cliente identificados
+Análisis de sentimiento de opiniones (NLP), mediante Transformer de HF
 
-🗒️ Importante
+## 📁 Modelos
+
+ann.pkl - Red neuronal para late checkout
+
+xgboost.pkl - Regresor de tiempos
+
+kmeans.pkl - Clustering de perfiles
+
+## 🎯 Resultados
+
+Carga equilibrada entre camareras
+
+Tiempos de limpieza precisos (±3 min)
+
+6 perfiles de cliente identificados
+
+##🗒️ Importante
 
 Para utilizar la aplicación utiliza los CSV de la carpeta "DATASETS"
 
