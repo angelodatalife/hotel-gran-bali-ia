@@ -1,4 +1,4 @@
-**Hotel Gran Bali - NeuralClean**
+## **Hotel Gran Bali - NeuralClean**
 
 Sistema inteligente de gestión de limpieza que optimiza la asignación de tareas según perfil de cliente.
 
@@ -30,7 +30,7 @@ Tiempos de limpieza precisos (±3 min)
 
 6 perfiles de cliente identificados
 
-##🗒️ Importante
+## 🗒️ Importante
 
 Para utilizar la aplicación utiliza los CSV de la carpeta "DATASETS"
 
