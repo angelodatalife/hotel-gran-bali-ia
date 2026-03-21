@@ -1,4 +1,4 @@
-## **Hotel Gran Bali - NeuralClean**
+## **BI Sistem - NeuralClean**
 
 Sistema inteligente de gestión de limpieza que optimiza la asignación de tareas según perfil de cliente.
 
