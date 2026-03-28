@@ -12,7 +12,7 @@ Estimación de tiempo de limpieza (XGBoost, MAE ~3.2 min)
 
 Segmentación de habitaciones en 6 perfiles (K-Means)
 
-Análisis de sentimiento de opiniones (NLP), mediante Transformer de HF
+Análisis de sentimiento de opiniones de clientes (NLP)
 
 Deployment en Streamlit
 
@@ -23,6 +23,8 @@ ann.pkl - Red neuronal para late checkout
 xgboost.pkl - Regresor de tiempos
 
 kmeans.pkl - Clustering de perfiles
+
+NLP mediante Transformer de HF
 
 ## 🎯 Resultados
 
